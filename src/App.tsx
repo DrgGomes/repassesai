@@ -1,16 +1,18 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { supabase } from './supabase'; // CONEXÃO COM O BANCO!
 import { 
   PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, Legend 
 } from 'recharts';
 import { 
-  LayoutDashboard, UploadCloud, Hourglass, AlertCircle, Download, CheckCircle2, FileSpreadsheet, TrendingUp, AlertTriangle, FileText
+  LayoutDashboard, UploadCloud, Hourglass, AlertCircle, Download, CheckCircle2, FileSpreadsheet, TrendingUp, AlertTriangle, FileText, Loader2, Database
 } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [isSyncing, setIsSyncing] = useState(false); // Estado de carregamento da Nuvem
   
   const [upsellerData, setUpsellerData] = useState<any[]>([]);
   const [kwaiData, setKwaiData] = useState<any[]>([]);
@@ -18,7 +20,6 @@ export default function App() {
 
   const COLORS = ['#10b981', '#F1C40F', '#e74c3c', '#94a3b8'];
 
-  // --- MÓDULO DE EMPILHAMENTO DE DADOS ---
   const lerPlanilha = (e: any, setDados: Function, nomeSistema: string) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -45,7 +46,6 @@ export default function App() {
     return new Date(dateStr.toString().replace(' ', 'T'));
   };
 
-  // --- EXPORTAR EXCEL ---
   const exportarExcel = (dados: any[], nomeArquivo: string) => {
     if (!dados || dados.length === 0) return alert("Não há dados para exportar.");
     const worksheet = XLSX.utils.json_to_sheet(dados);
@@ -54,16 +54,12 @@ export default function App() {
     XLSX.writeFile(workbook, `${nomeArquivo}.xlsx`);
   };
 
-  // --- EXPORTAR PDF CORRIGIDO ---
   const exportarPDF = (dados: any[], titulo: string, nomeArquivo: string) => {
     if (!dados || dados.length === 0) return alert("Não há dados para exportar.");
-    
     const doc = new jsPDF();
-    
     doc.setFontSize(18);
     doc.setTextColor(26, 26, 26);
     doc.text(`REPASSE.AI - ${titulo}`, 14, 20);
-    
     doc.setFontSize(10);
     doc.setTextColor(100, 100, 100);
     doc.text(`Gerado em: ${new Date().toLocaleDateString()} às ${new Date().toLocaleTimeString()}`, 14, 28);
@@ -79,28 +75,27 @@ export default function App() {
       headStyles: { fillColor: [26, 26, 26], textColor: [255, 255, 255], fontStyle: 'bold' },
       alternateRowStyles: { fillColor: [245, 245, 245] },
     });
-    
     doc.save(`${nomeArquivo}.pdf`);
   };
 
-  // --- MOTOR MATEMÁTICO ---
-  const executarConciliacao = () => {
+  const executarConciliacao = async () => {
     if (upsellerData.length === 0 || kwaiData.length === 0) {
       alert("⚠️ Faça o upload das DUAS planilhas antes de conciliar.");
       return;
     }
 
+    setIsSyncing(true); // Liga o aviso de carregamento
+
     let maxKwaiDate = new Date(0);
-    
     const kwaiLimpo: any[] = [];
     const kwaiIds = new Set();
+    
     [...kwaiData].reverse().forEach(row => {
       const idKwai = String(row['Número do pedido']);
       if (!kwaiIds.has(idKwai) && row['Status de liquidação'] !== 'Cancelar') {
         kwaiIds.add(idKwai);
         kwaiLimpo.push(row);
       }
-      
       const dataString = row['Data de conclusão do pedido'] || row['Data de geração do pedido'] || (row['Ciclo de faturamento'] ? String(row['Ciclo de faturamento']).split('~')[1] : null);
       if (dataString) {
         const d = parseDataStr(dataString);
@@ -126,6 +121,9 @@ export default function App() {
     let corretosLista: any[] = [];
     let valorBruto = 0;
     let totalRetido = 0;
+    
+    // Lista para mandarmos para o Banco de Dados (Supabase)
+    const registrosBanco: any[] = [];
 
     upsellerLimpo.forEach(upRow => {
       const statusPos = upRow['Pós-venda/Cancelado/Devolvido'];
@@ -141,29 +139,66 @@ export default function App() {
       const taxaRegra = (valorPedido * 0.20) + (qtd * 4.00);
       const repasseEsperado = valorPedido - taxaRegra;
 
-      if (!kwaiRow) {
-        const dataEnvio = parseDataStr(upRow['Hora de Envio'] || upRow['Hora do Pedido']);
-        const dataVencimento = new Date(dataEnvio.getTime() + (22 * 24 * 60 * 60 * 1000));
+      const dataEnvio = parseDataStr(upRow['Hora de Envio'] || upRow['Hora do Pedido']);
+      const dataVencimento = new Date(dataEnvio.getTime() + (22 * 24 * 60 * 60 * 1000));
 
+      let statusBanco = "";
+      let receitaKwaiBanco = 0;
+      let rouboTaxaBanco = 0;
+
+      if (!kwaiRow) {
         if (dataVencimento > maxKwaiDate) {
           noPrazo.push({ "ID do Pedido": idPedido, "Valor Cliente (R$)": Number(valorPedido.toFixed(2)), "Data Envio": dataEnvio.toLocaleDateString(), "Vencimento Esperado": dataVencimento.toLocaleDateString() });
+          statusBanco = "NO_PRAZO";
         } else {
           atrasados.push({ "ID do Pedido": idPedido, "Valor Cliente (R$)": Number(valorPedido.toFixed(2)), "Repasse Atrasado (R$)": Number(repasseEsperado.toFixed(2)) });
           totalRetido += repasseEsperado;
+          statusBanco = "ATRASADO";
         }
       } else {
         const receitaKwai = Number(kwaiRow['Receita']) || 0;
+        receitaKwaiBanco = receitaKwai;
         const descontoReal = valorPedido - receitaKwai;
         const cobradoAMais = descontoReal - taxaRegra;
 
         if (cobradoAMais > 0.50) {
           indevidos.push({ "ID do Pedido": idPedido, "Valor Cliente (R$)": Number(valorPedido.toFixed(2)), "Desconto Aplicado (R$)": Number(descontoReal.toFixed(2)), "Roubo na Taxa (R$)": Number(cobradoAMais.toFixed(2)) });
           totalRetido += cobradoAMais;
+          rouboTaxaBanco = cobradoAMais;
+          statusBanco = "TAXA_INDEVIDA";
         } else {
           corretosLista.push({ "ID do Pedido": idPedido, "Valor Cliente (R$)": Number(valorPedido.toFixed(2)), "Receita Kwai (R$)": Number(receitaKwai.toFixed(2)) });
+          statusBanco = "PAGO_CORRETO";
         }
       }
+
+      // Prepara a gaveta para o Banco de Dados
+      registrosBanco.push({
+        id_pedido: idPedido,
+        valor_bruto: valorPedido,
+        data_envio: dataEnvio.toISOString(),
+        vencimento_esperado: dataVencimento.toISOString(),
+        status: statusBanco,
+        receita_kwai: receitaKwaiBanco,
+        roubo_taxa: rouboTaxaBanco,
+        data_ultima_leitura: new Date().toISOString()
+      });
     });
+
+    // --- ENVIANDO PARA O SUPABASE EM LOTES ---
+    try {
+      // Como podem ser milhares de pedidos, dividimos de 500 em 500 para não travar
+      for (let i = 0; i < registrosBanco.length; i += 500) {
+        const lote = registrosBanco.slice(i, i + 500);
+        const { error } = await supabase.from('pedidos_kwai').upsert(lote);
+        if (error) {
+          console.error("Erro no Supabase:", error);
+          alert("⚠️ Aviso: O cruzamento foi feito, mas houve um erro ao salvar na Nuvem.");
+        }
+      }
+    } catch (err) {
+      console.error("Erro geral na conexão com Supabase:", err);
+    }
 
     const chartStatus = [
       { name: 'Pagos Corretos', value: corretosLista.length },
@@ -178,6 +213,7 @@ export default function App() {
     ];
 
     setResultados({ atrasados, indevidos, noPrazo, corretos: corretosLista, valorBruto, totalRetido, maxKwaiDate, chartStatus, chartFinanceiro });
+    setIsSyncing(false); // Desliga aviso de carregamento
     setActiveTab('dashboard');
   };
 
@@ -197,10 +233,10 @@ export default function App() {
       <div className="w-20 md:w-64 bg-[#1a1a1a] flex flex-col shadow-2xl z-20 flex-shrink-0">
         <div className="p-4 md:p-6 border-b border-gray-800 flex flex-col items-center md:items-start">
           <div className="bg-[#F1C40F] p-2 rounded-lg mb-2">
-            <TrendingUp size={24} className="text-[#1a1a1a]" />
+            <Database size={24} className="text-[#1a1a1a]" />
           </div>
           <h1 className="hidden md:block text-2xl font-black tracking-widest text-white mt-2">REPASSE<span className="text-[#F1C40F]">.AI</span></h1>
-          <p className="hidden md:block text-[10px] text-gray-500 uppercase tracking-widest mt-1">Versão 1.5 Final</p>
+          <p className="hidden md:block text-[10px] text-gray-500 uppercase tracking-widest mt-1">V2.0 Cloud Database</p>
         </div>
         
         <nav className="flex-1 p-3 space-y-4 mt-4">
@@ -217,9 +253,12 @@ export default function App() {
         {/* DASHBOARD */}
         {activeTab === 'dashboard' && (
           <div className="w-full h-full animate-fade-in">
-            <header className="mb-8">
-              <h2 className="text-3xl md:text-4xl font-black text-gray-900 tracking-tight">Dashboard Financeiro</h2>
-              <p className="text-gray-500 mt-1">Visão completa e responsiva do seu fluxo de caixa.</p>
+            <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center">
+              <div>
+                <h2 className="text-3xl md:text-4xl font-black text-gray-900 tracking-tight">Dashboard Financeiro</h2>
+                <p className="text-gray-500 mt-1">Integrado em tempo real com seu banco de dados.</p>
+              </div>
+              {resultados && <div className="mt-4 md:mt-0 flex items-center gap-2 text-green-600 bg-green-50 px-4 py-2 rounded-full font-bold text-sm shadow-sm border border-green-100"><Database size={16}/> Sincronizado na Nuvem</div>}
             </header>
             
             {!resultados ? (
@@ -273,7 +312,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* CHARTS */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-10 w-full">
                   <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 h-96 flex flex-col w-full">
                     <h3 className="text-lg font-bold text-gray-800 mb-6">Status dos Pedidos</h3>
@@ -320,14 +358,14 @@ export default function App() {
           <div className="w-full mx-auto animate-fade-in">
             <header className="mb-10 text-center md:text-left">
               <h2 className="text-3xl md:text-4xl font-black text-gray-900 tracking-tight">Nova Auditoria</h2>
-              <p className="text-gray-500 mt-2">Você pode subir vários arquivos seguidos. O sistema vai empilhar e juntar tudo!</p>
+              <p className="text-gray-500 mt-2">Faça o upload dos arquivos e nós enviaremos tudo em segurança para a nuvem.</p>
             </header>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10 w-full">
               <label className={`relative overflow-hidden border-2 border-dashed rounded-3xl p-10 flex flex-col items-center justify-center cursor-pointer transition-all duration-300 ${upsellerData.length > 0 ? 'border-[#10b981] bg-[#ecfdf5]' : 'border-gray-300 bg-white hover:border-[#F1C40F] hover:shadow-lg'}`}>
                 {upsellerData.length > 0 && <div className="absolute top-4 right-4 bg-[#10b981] text-white p-1 rounded-full"><CheckCircle2 size={20}/></div>}
                 <UploadCloud size={48} className={upsellerData.length > 0 ? 'text-[#10b981] mb-4' : 'text-gray-400 mb-4'} />
-                <p className="text-gray-700 mb-4 font-bold text-center">{upsellerData.length > 0 ? `${upsellerData.length} registros (Pode subir mais!)` : '1. Relatório UPSELLER'}</p>
+                <p className="text-gray-700 mb-4 font-bold text-center">{upsellerData.length > 0 ? `${upsellerData.length} registros em memória` : '1. Relatório UPSELLER'}</p>
                 <div className="bg-[#1a1a1a] text-white px-8 py-3 rounded-full font-bold text-sm shadow-md hover:scale-105 transition-transform">Selecionar Arquivo</div>
                 <input type="file" accept=".xlsx, .xls, .csv" className="hidden" onChange={(e) => lerPlanilha(e, setUpsellerData, 'Upseller')} />
               </label>
@@ -335,19 +373,30 @@ export default function App() {
               <label className={`relative overflow-hidden border-2 border-dashed rounded-3xl p-10 flex flex-col items-center justify-center cursor-pointer transition-all duration-300 ${kwaiData.length > 0 ? 'border-[#10b981] bg-[#ecfdf5]' : 'border-gray-300 bg-white hover:border-[#F1C40F] hover:shadow-lg'}`}>
                 {kwaiData.length > 0 && <div className="absolute top-4 right-4 bg-[#10b981] text-white p-1 rounded-full"><CheckCircle2 size={20}/></div>}
                 <FileSpreadsheet size={48} className={kwaiData.length > 0 ? 'text-[#10b981] mb-4' : 'text-gray-400 mb-4'} />
-                <p className="text-gray-700 mb-4 font-bold text-center">{kwaiData.length > 0 ? `${kwaiData.length} registros (Pode subir mais!)` : '2. Extrato KWAI'}</p>
+                <p className="text-gray-700 mb-4 font-bold text-center">{kwaiData.length > 0 ? `${kwaiData.length} registros em memória` : '2. Extrato KWAI'}</p>
                 <div className="bg-[#F1C40F] text-[#1a1a1a] px-8 py-3 rounded-full font-bold text-sm shadow-md hover:scale-105 transition-transform">Selecionar Arquivo</div>
                 <input type="file" accept=".xlsx, .xls, .csv" className="hidden" onChange={(e) => lerPlanilha(e, setKwaiData, 'Kwai')} />
               </label>
             </div>
 
-            <button onClick={executarConciliacao} className="w-full relative overflow-hidden group bg-[#1a1a1a] text-[#F1C40F] font-black text-xl py-6 rounded-2xl shadow-xl hover:shadow-2xl hover:-translate-y-1 transition-all uppercase tracking-widest flex items-center justify-center gap-3">
-              <span className="relative z-10 flex items-center gap-2">Processar Cruzamento <TrendingUp size={24}/></span>
-              <div className="absolute inset-0 bg-black w-0 group-hover:w-full transition-all duration-500 ease-out z-0"></div>
+            <button 
+              onClick={executarConciliacao} 
+              disabled={isSyncing}
+              className={`w-full relative overflow-hidden group font-black text-xl py-6 rounded-2xl shadow-xl uppercase tracking-widest flex items-center justify-center gap-3 transition-all ${isSyncing ? 'bg-gray-800 text-gray-400 cursor-not-allowed' : 'bg-[#1a1a1a] text-[#F1C40F] hover:shadow-2xl hover:-translate-y-1'}`}>
+              
+              {isSyncing ? (
+                <span className="relative z-10 flex items-center gap-2"><Loader2 className="animate-spin" size={24}/> Sincronizando com a Nuvem...</span>
+              ) : (
+                <>
+                  <span className="relative z-10 flex items-center gap-2">Processar e Salvar no Banco <Database size={24}/></span>
+                  <div className="absolute inset-0 bg-black w-0 group-hover:w-full transition-all duration-500 ease-out z-0"></div>
+                </>
+              )}
             </button>
           </div>
         )}
 
+        {/* TAB 3 E 4: MANTIDAS IGUAIS (SÓ EXIBINDO DADOS) */}
         {/* TAB 3: AGUARDANDO VENCIMENTO */}
         {activeTab === 'aguardando' && (
           <div className="w-full animate-fade-in">
@@ -363,20 +412,12 @@ export default function App() {
                 </div>
               )}
             </div>
-            
-            {!resultados ? (
-              <div className="bg-white rounded-3xl shadow-sm p-12 text-center border border-gray-100 text-gray-500">Nenhum dado disponível.</div>
-            ) : (
+            {!resultados ? ( <div className="bg-white rounded-3xl shadow-sm p-12 text-center border border-gray-100 text-gray-500">Nenhum dado disponível.</div> ) : (
               <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden w-full">
                 <div className="max-h-[70vh] overflow-y-auto">
                   <table className="w-full text-left border-collapse">
                     <thead className="bg-gray-50 text-gray-500 text-xs uppercase font-bold sticky top-0 z-10 shadow-sm">
-                      <tr>
-                        <th className="p-4 whitespace-nowrap">ID do Pedido</th>
-                        <th className="p-4 whitespace-nowrap">Data Envio</th>
-                        <th className="p-4 whitespace-nowrap">Vencimento</th>
-                        <th className="p-4 text-right whitespace-nowrap">Valor</th>
-                      </tr>
+                      <tr><th className="p-4 whitespace-nowrap">ID do Pedido</th><th className="p-4 whitespace-nowrap">Data Envio</th><th className="p-4 whitespace-nowrap">Vencimento</th><th className="p-4 text-right whitespace-nowrap">Valor</th></tr>
                     </thead>
                     <tbody className="text-sm">
                       {resultados.noPrazo.map((item: any, idx: number) => (
@@ -403,13 +444,8 @@ export default function App() {
               <h2 className="text-3xl md:text-4xl font-black text-gray-900 tracking-tight">Fila de Cobrança</h2>
               <p className="text-gray-500 mt-1">Dossiês prontos para exportar e abrir chamado.</p>
             </header>
-
-            {!resultados ? (
-              <div className="bg-white rounded-3xl shadow-sm p-12 text-center border border-gray-100 text-gray-500">Nenhum dado processado.</div>
-            ) : (
+            {!resultados ? ( <div className="bg-white rounded-3xl shadow-sm p-12 text-center border border-gray-100 text-gray-500">Nenhum dado processado.</div> ) : (
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 w-full">
-                
-                {/* ATRASADOS CARD */}
                 <div className="bg-white border border-gray-100 rounded-3xl shadow-sm flex flex-col h-[75vh] overflow-hidden w-full">
                   <div className="bg-orange-50 p-4 lg:p-6 border-b border-orange-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
@@ -438,7 +474,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* INDEVIDOS CARD */}
                 <div className="bg-white border border-gray-100 rounded-3xl shadow-sm flex flex-col h-[75vh] overflow-hidden w-full">
                   <div className="bg-red-50 p-4 lg:p-6 border-b border-red-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
@@ -466,7 +501,6 @@ export default function App() {
                     </table>
                   </div>
                 </div>
-
               </div>
             )}
           </div>
