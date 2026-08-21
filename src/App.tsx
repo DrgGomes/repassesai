@@ -1,506 +1,255 @@
-import { useState } from 'react';
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import { supabase } from './supabase'; // CONEXÃO COM O BANCO!
-import { 
-  PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, Legend 
-} from 'recharts';
-import { 
-  LayoutDashboard, UploadCloud, Hourglass, AlertCircle, Download, CheckCircle2, FileSpreadsheet, TrendingUp, AlertTriangle, FileText, Loader2, Database
-} from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { supabase } from './supabase';
+import Dashboard from './Dashboard';
+import { Loader2, Mail, Lock, Building2, User, Phone, KeyRound, AlertCircle, ArrowRight } from 'lucide-react';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [isSyncing, setIsSyncing] = useState(false); // Estado de carregamento da Nuvem
-  
-  const [upsellerData, setUpsellerData] = useState<any[]>([]);
-  const [kwaiData, setKwaiData] = useState<any[]>([]);
-  const [resultados, setResultados] = useState<any>(null);
+  const [session, setSession] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [hasProfile, setHasProfile] = useState(false);
 
-  const COLORS = ['#10b981', '#F1C40F', '#e74c3c', '#94a3b8'];
+  // Estados da Tela de Login/Auth
+  const [authMode, setAuthMode] = useState<'login' | 'register' | 'recovery' | 'update_password'>('login');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [msg, setMsg] = useState({ type: '', text: '' });
+  const [isLoadingAuth, setIsLoadingAuth] = useState(false);
 
-  const lerPlanilha = (e: any, setDados: Function, nomeSistema: string) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  // Estados do Formulário de Empresa (SaaS)
+  const [tipoDoc, setTipoDoc] = useState('CNPJ');
+  const [doc, setDoc] = useState('');
+  const [nome, setNome] = useState('');
+  const [telefone, setTelefone] = useState('');
 
-    const reader = new FileReader();
-    reader.onload = (evento) => {
-      const arrayBuffer = evento.target?.result;
-      const workbook = XLSX.read(arrayBuffer, { type: 'array' });
-      const aba = workbook.Sheets[workbook.SheetNames[0]];
-      const dadosJson = XLSX.utils.sheet_to_json(aba);
-      
-      setDados((prev: any[]) => {
-        const novosDados = [...prev, ...dadosJson];
-        alert(`✅ Mais ${dadosJson.length} linhas da ${nomeSistema} adicionadas! Total agora: ${novosDados.length} linhas.`);
-        return novosDados;
-      });
-      e.target.value = ''; 
-    };
-    reader.readAsArrayBuffer(file);
-  };
-
-  const parseDataStr = (dateStr: string) => {
-    if (!dateStr) return new Date(0);
-    return new Date(dateStr.toString().replace(' ', 'T'));
-  };
-
-  const exportarExcel = (dados: any[], nomeArquivo: string) => {
-    if (!dados || dados.length === 0) return alert("Não há dados para exportar.");
-    const worksheet = XLSX.utils.json_to_sheet(dados);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Relatório");
-    XLSX.writeFile(workbook, `${nomeArquivo}.xlsx`);
-  };
-
-  const exportarPDF = (dados: any[], titulo: string, nomeArquivo: string) => {
-    if (!dados || dados.length === 0) return alert("Não há dados para exportar.");
-    const doc = new jsPDF();
-    doc.setFontSize(18);
-    doc.setTextColor(26, 26, 26);
-    doc.text(`REPASSE.AI - ${titulo}`, 14, 20);
-    doc.setFontSize(10);
-    doc.setTextColor(100, 100, 100);
-    doc.text(`Gerado em: ${new Date().toLocaleDateString()} às ${new Date().toLocaleTimeString()}`, 14, 28);
-
-    const colunas = Object.keys(dados[0]);
-    const linhas = dados.map(obj => colunas.map(col => obj[col]));
-
-    autoTable(doc, {
-      head: [colunas],
-      body: linhas,
-      startY: 35,
-      styles: { fontSize: 8, cellPadding: 3 },
-      headStyles: { fillColor: [26, 26, 26], textColor: [255, 255, 255], fontStyle: 'bold' },
-      alternateRowStyles: { fillColor: [245, 245, 245] },
-    });
-    doc.save(`${nomeArquivo}.pdf`);
-  };
-
-  const executarConciliacao = async () => {
-    if (upsellerData.length === 0 || kwaiData.length === 0) {
-      alert("⚠️ Faça o upload das DUAS planilhas antes de conciliar.");
-      return;
-    }
-
-    setIsSyncing(true); // Liga o aviso de carregamento
-
-    let maxKwaiDate = new Date(0);
-    const kwaiLimpo: any[] = [];
-    const kwaiIds = new Set();
-    
-    [...kwaiData].reverse().forEach(row => {
-      const idKwai = String(row['Número do pedido']);
-      if (!kwaiIds.has(idKwai) && row['Status de liquidação'] !== 'Cancelar') {
-        kwaiIds.add(idKwai);
-        kwaiLimpo.push(row);
-      }
-      const dataString = row['Data de conclusão do pedido'] || row['Data de geração do pedido'] || (row['Ciclo de faturamento'] ? String(row['Ciclo de faturamento']).split('~')[1] : null);
-      if (dataString) {
-        const d = parseDataStr(dataString);
-        if (d > maxKwaiDate) maxKwaiDate = d;
-      }
+  // Verifica o status do usuário sempre que o app abre
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session) checkProfile(session.user.id);
+      else setLoading(false);
     });
 
-    if (maxKwaiDate.getTime() === 0) maxKwaiDate = new Date();
-
-    const upsellerLimpo: any[] = [];
-    const upIds = new Set();
-    upsellerData.forEach(row => {
-      const idPedido = String(row['Nº de Pedido da Plataforma']);
-      if (!upIds.has(idPedido)) {
-        upIds.add(idPedido);
-        upsellerLimpo.push(row);
-      }
-    });
-
-    let atrasados: any[] = [];
-    let indevidos: any[] = [];
-    let noPrazo: any[] = [];
-    let corretosLista: any[] = [];
-    let valorBruto = 0;
-    let totalRetido = 0;
-    
-    const registrosBanco: any[] = [];
-
-    upsellerLimpo.forEach(upRow => {
-      const statusPos = upRow['Pós-venda/Cancelado/Devolvido'];
-      if (statusPos === 'Cancelado' || statusPos === 'Cancelado/Pós-vendas') return;
-
-      const idPedido = String(upRow['Nº de Pedido da Plataforma']);
-      const valorPedido = Number(upRow['Valor do Pedido']) || 0;
-      const qtd = Number(upRow['Qtd. do Produto']) || 1;
-
-      valorBruto += valorPedido;
-
-      const kwaiRow = kwaiLimpo.find(k => String(k['Número do pedido']) === idPedido);
-      const taxaRegra = (valorPedido * 0.20) + (qtd * 4.00);
-      const repasseEsperado = valorPedido - taxaRegra;
-
-      const dataEnvio = parseDataStr(upRow['Hora de Envio'] || upRow['Hora do Pedido']);
-      const dataVencimento = new Date(dataEnvio.getTime() + (22 * 24 * 60 * 60 * 1000));
-
-      let statusBanco = "";
-      let receitaKwaiBanco = 0;
-      let rouboTaxaBanco = 0;
-
-      if (!kwaiRow) {
-        if (dataVencimento > maxKwaiDate) {
-          noPrazo.push({ "ID do Pedido": idPedido, "Valor Cliente (R$)": Number(valorPedido.toFixed(2)), "Data Envio": dataEnvio.toLocaleDateString(), "Vencimento Esperado": dataVencimento.toLocaleDateString() });
-          statusBanco = "NO_PRAZO";
-        } else {
-          atrasados.push({ "ID do Pedido": idPedido, "Valor Cliente (R$)": Number(valorPedido.toFixed(2)), "Repasse Atrasado (R$)": Number(repasseEsperado.toFixed(2)) });
-          totalRetido += repasseEsperado;
-          statusBanco = "ATRASADO";
-        }
+    // Escuta se a pessoa entrou, saiu, ou clicou no link de resetar senha
+    supabase.auth.onAuthStateChange((_event, session) => {
+      if (_event === 'PASSWORD_RECOVERY') setAuthMode('update_password');
+      setSession(session);
+      if (session) {
+        checkProfile(session.user.id);
       } else {
-        const receitaKwai = Number(kwaiRow['Receita']) || 0;
-        receitaKwaiBanco = receitaKwai;
-        const descontoReal = valorPedido - receitaKwai;
-        const cobradoAMais = descontoReal - taxaRegra;
-
-        if (cobradoAMais > 0.50) {
-          indevidos.push({ "ID do Pedido": idPedido, "Valor Cliente (R$)": Number(valorPedido.toFixed(2)), "Desconto Aplicado (R$)": Number(descontoReal.toFixed(2)), "Roubo na Taxa (R$)": Number(cobradoAMais.toFixed(2)) });
-          totalRetido += cobradoAMais;
-          rouboTaxaBanco = cobradoAMais;
-          statusBanco = "TAXA_INDEVIDA";
-        } else {
-          corretosLista.push({ "ID do Pedido": idPedido, "Valor Cliente (R$)": Number(valorPedido.toFixed(2)), "Receita Kwai (R$)": Number(receitaKwai.toFixed(2)) });
-          statusBanco = "PAGO_CORRETO";
-        }
+        setHasProfile(false);
+        setLoading(false);
       }
-
-      registrosBanco.push({
-        id_pedido: idPedido,
-        valor_bruto: valorPedido,
-        data_envio: dataEnvio.toISOString(),
-        vencimento_esperado: dataVencimento.toISOString(),
-        status: statusBanco,
-        receita_kwai: receitaKwaiBanco,
-        roubo_taxa: rouboTaxaBanco,
-        data_ultima_leitura: new Date().toISOString()
-      });
     });
+  }, []);
+
+  // Procura no banco de dados se esse usuário já preencheu os dados da empresa
+  const checkProfile = async (userId: string) => {
+    const { data } = await supabase.from('empresas').select('*').eq('id', userId).single();
+    if (data) setHasProfile(true);
+    setLoading(false);
+  };
+
+  // Motor de Login / Cadastro / Senha
+  const handleAuth = async (e: any) => {
+    e.preventDefault();
+    setIsLoadingAuth(true);
+    setMsg({ type: '', text: '' });
+    let authError = null;
 
     try {
-      for (let i = 0; i < registrosBanco.length; i += 500) {
-        const lote = registrosBanco.slice(i, i + 500);
-        const { error } = await supabase.from('pedidos_kwai').upsert(lote);
-        if (error) {
-          console.error("Erro no Supabase:", error);
-          alert("⚠️ Aviso: O cruzamento foi feito, mas houve um erro ao salvar na Nuvem.");
+      if (authMode === 'login') {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        authError = error;
+      } else if (authMode === 'register') {
+        const { error } = await supabase.auth.signUp({ email, password });
+        authError = error;
+        if (!error) setMsg({ type: 'success', text: 'Tudo certo! Acesse seu e-mail para confirmar a conta.' });
+      } else if (authMode === 'recovery') {
+        const { error } = await supabase.auth.resetPasswordForEmail(email);
+        authError = error;
+        if (!error) setMsg({ type: 'success', text: 'Instruções enviadas para seu e-mail.' });
+      } else if (authMode === 'update_password') {
+        const { error } = await supabase.auth.updateUser({ password });
+        authError = error;
+        if (!error) {
+          setMsg({ type: 'success', text: 'Senha atualizada com sucesso!' });
+          setAuthMode('login');
         }
       }
     } catch (err) {
-      console.error("Erro geral na conexão com Supabase:", err);
+      console.error(err);
     }
 
-    const chartStatus = [
-      { name: 'Pagos Corretos', value: corretosLista.length },
-      { name: 'No Prazo', value: noPrazo.length },
-      { name: 'Taxa Indevida', value: indevidos.length },
-      { name: 'Atrasados', value: atrasados.length }
-    ].filter(item => item.value > 0);
-
-    const chartFinanceiro = [
-      { name: 'Prejuízo/Retido', valor: Number(totalRetido.toFixed(2)) },
-      { name: 'Repassado', valor: Number((valorBruto - totalRetido).toFixed(2)) }
-    ];
-
-    setResultados({ atrasados, indevidos, noPrazo, corretos: corretosLista, valorBruto, totalRetido, maxKwaiDate, chartStatus, chartFinanceiro });
-    setIsSyncing(false);
-    setActiveTab('dashboard');
+    if (authError) {
+      // Traduz os erros mais comuns do Supabase
+      if (authError.message.includes('Invalid login')) setMsg({ type: 'error', text: 'E-mail ou senha incorretos.' });
+      else if (authError.message.includes('already registered')) setMsg({ type: 'error', text: 'Este e-mail já está em uso.' });
+      else if (authError.message.includes('at least 6')) setMsg({ type: 'error', text: 'A senha deve ter no mínimo 6 caracteres.' });
+      else setMsg({ type: 'error', text: authError.message });
+    }
+    
+    setIsLoadingAuth(false);
   };
 
-  const NavButton = ({ id, icon: Icon, label }: any) => (
-    <button 
-      onClick={() => setActiveTab(id)} 
-      className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all duration-300 ${activeTab === id ? 'bg-[#F1C40F] text-[#1a1a1a] shadow-lg scale-105' : 'text-gray-400 hover:bg-gray-800 hover:text-white'}`}>
-      <Icon size={20} />
-      <span className="hidden md:inline">{label}</span>
-    </button>
-  );
+  // Salva o Perfil da Empresa
+  const saveProfile = async (e: any) => {
+    e.preventDefault();
+    setIsLoadingAuth(true);
+    const { error } = await supabase.from('empresas').insert({
+      id: session.user.id,
+      tipo_documento: tipoDoc,
+      documento: doc,
+      nome_razao: nome,
+      telefone: telefone
+    });
+    setIsLoadingAuth(false);
+    if (error) setMsg({ type: 'error', text: 'Erro ao salvar perfil. O Documento já pode estar em uso.' });
+    else setHasProfile(true); // Libera a catraca pro Dashboard!
+  };
 
-  return (
-    <div className="flex h-screen w-full bg-[#f3f4f6] font-sans text-gray-800 overflow-hidden">
-      
-      {/* SIDEBAR */}
-      <div className="w-20 md:w-64 bg-[#1a1a1a] flex flex-col shadow-2xl z-20 flex-shrink-0">
-        <div className="p-4 md:p-6 border-b border-gray-800 flex flex-col items-center md:items-start">
-          <div className="bg-[#F1C40F] p-2 rounded-lg mb-2">
-            <Database size={24} className="text-[#1a1a1a]" />
+  // 1. TELA DE CARREGAMENTO INICIAL
+  if (loading) {
+    return (
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-[#1a1a1a] text-white">
+        <Loader2 className="animate-spin text-[#F1C40F] mb-4" size={48} />
+        <p className="font-bold tracking-widest text-sm text-gray-400">CARREGANDO WORKSPACE...</p>
+      </div>
+    );
+  }
+
+  // 2. TELA DE CADASTRO DA EMPRESA (Obriga a pessoa a preencher dados antes de usar o sistema)
+  if (session && !hasProfile) {
+    return (
+      <div className="h-screen w-screen flex items-center justify-center bg-gray-100 p-4">
+        <div className="bg-white p-8 md:p-12 rounded-3xl shadow-xl w-full max-w-xl animate-fade-in">
+          <div className="mb-8">
+            <h2 className="text-3xl font-black text-gray-900 mb-2">Complete seu Cadastro</h2>
+            <p className="text-gray-500">Configure os dados da sua operação para liberar o painel.</p>
           </div>
-          <h1 className="hidden md:block text-2xl font-black tracking-widest text-white mt-2">REPASSE<span className="text-[#F1C40F]">.AI</span></h1>
-          <p className="hidden md:block text-[10px] text-gray-500 uppercase tracking-widest mt-1">V2.0 Cloud Database</p>
+          
+          <form onSubmit={saveProfile} className="space-y-5">
+            {msg.text && <div className={`p-4 rounded-xl font-bold text-sm ${msg.type === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{msg.text}</div>}
+            
+            <div className="flex gap-4 mb-4">
+               <label className={`flex-1 p-4 rounded-xl border-2 text-center font-bold cursor-pointer transition-colors ${tipoDoc === 'CNPJ' ? 'border-[#F1C40F] bg-yellow-50 text-yellow-900' : 'border-gray-200 text-gray-400'}`}>
+                 <input type="radio" className="hidden" checked={tipoDoc === 'CNPJ'} onChange={() => setTipoDoc('CNPJ')} /> CNPJ (Empresa)
+               </label>
+               <label className={`flex-1 p-4 rounded-xl border-2 text-center font-bold cursor-pointer transition-colors ${tipoDoc === 'CPF' ? 'border-[#F1C40F] bg-yellow-50 text-yellow-900' : 'border-gray-200 text-gray-400'}`}>
+                 <input type="radio" className="hidden" checked={tipoDoc === 'CPF'} onChange={() => setTipoDoc('CPF')} /> CPF (Física)
+               </label>
+            </div>
+
+            <div className="relative">
+              <Building2 className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+              <input required type="text" placeholder={`Digite seu ${tipoDoc}`} value={doc} onChange={e => setDoc(e.target.value)} className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl py-4 pl-12 pr-4 focus:border-[#F1C40F] outline-none font-bold" />
+            </div>
+
+            <div className="relative">
+              <User className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+              <input required type="text" placeholder={tipoDoc === 'CNPJ' ? 'Razão Social' : 'Nome Completo'} value={nome} onChange={e => setNome(e.target.value)} className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl py-4 pl-12 pr-4 focus:border-[#F1C40F] outline-none font-bold" />
+            </div>
+            
+            <div className="relative">
+              <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+              <input required type="text" placeholder="WhatsApp / Telefone" value={telefone} onChange={e => setTelefone(e.target.value)} className="w-full bg-gray-50 border-2 border-gray-100 rounded-xl py-4 pl-12 pr-4 focus:border-[#F1C40F] outline-none font-bold" />
+            </div>
+
+            <button disabled={isLoadingAuth} type="submit" className="w-full bg-[#1a1a1a] text-[#F1C40F] py-4 rounded-xl font-black text-lg tracking-widest hover:-translate-y-1 transition-transform flex justify-center items-center gap-2 mt-4">
+              {isLoadingAuth ? <Loader2 className="animate-spin" /> : <>ACESSAR PAINEL <ArrowRight size={20}/></>}
+            </button>
+          </form>
         </div>
-        
-        <nav className="flex-1 p-3 space-y-4 mt-4">
-          <NavButton id="dashboard" icon={LayoutDashboard} label="Visão Geral" />
-          <NavButton id="upload" icon={UploadCloud} label="Nova Auditoria" />
-          <NavButton id="aguardando" icon={Hourglass} label="No Prazo" />
-          <NavButton id="cobranca" icon={AlertTriangle} label="Fila de Cobrança" />
-        </nav>
+      </div>
+    );
+  }
+
+  // 3. O CORAÇÃO DO SAAS: O DASHBOARD PARA QUEM TEM TUDO CONFIGURADO!
+  if (session && hasProfile) {
+    return <Dashboard session={session} />;
+  }
+
+  // 4. TELA DE LOGIN / REGISTRO PRINCIPAL
+  return (
+    <div className="h-screen w-screen flex flex-col md:flex-row bg-white overflow-hidden font-sans">
+      
+      {/* Lado Esquerdo - Branding */}
+      <div className="hidden md:flex w-1/2 bg-[#1a1a1a] p-12 flex-col justify-between relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-[#F1C40F] rounded-full blur-3xl opacity-10 -mr-20 -mt-20"></div>
+        <div className="relative z-10">
+           <h1 className="text-4xl font-black text-white tracking-widest">REPASSE<span className="text-[#F1C40F]">.AI</span></h1>
+           <p className="text-gray-400 mt-4 text-lg font-medium max-w-md leading-relaxed">
+             A primeira plataforma de auditoria financeira automatizada exclusiva para grandes vendedores Kwai e Upseller.
+           </p>
+        </div>
+        <div className="relative z-10">
+           <div className="flex items-center gap-4 text-white mb-6">
+             <div className="bg-green-500/20 p-3 rounded-full text-green-400"><AlertCircle size={24}/></div>
+             <p className="font-bold">Recupere taxas indevidas</p>
+           </div>
+           <div className="flex items-center gap-4 text-white">
+             <div className="bg-[#F1C40F]/20 p-3 rounded-full text-[#F1C40F]"><Lock size={24}/></div>
+             <p className="font-bold">Segurança de nível bancário</p>
+           </div>
+        </div>
       </div>
 
-      {/* ÁREA PRINCIPAL */}
-      <div className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth w-full">
-        
-        {/* DASHBOARD */}
-        {activeTab === 'dashboard' && (
-          <div className="w-full h-full animate-fade-in">
-            <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center">
-              <div>
-                <h2 className="text-3xl md:text-4xl font-black text-gray-900 tracking-tight">Dashboard Financeiro</h2>
-                <p className="text-gray-500 mt-1">Integrado em tempo real com seu banco de dados.</p>
-              </div>
-              {resultados && <div className="mt-4 md:mt-0 flex items-center gap-2 text-green-600 bg-green-50 px-4 py-2 rounded-full font-bold text-sm shadow-sm border border-green-100"><Database size={16}/> Sincronizado na Nuvem</div>}
-            </header>
-            
-            {!resultados ? (
-              <div className="flex flex-col items-center justify-center bg-white p-16 rounded-3xl shadow-sm border border-gray-100 mt-10 w-full">
-                <FileSpreadsheet size={64} className="text-gray-300 mb-6" />
-                <h3 className="text-xl font-bold text-gray-600">Nenhum dado processado</h3>
-                <button onClick={() => setActiveTab('upload')} className="mt-8 bg-[#1a1a1a] text-white px-8 py-3 rounded-full font-bold hover:bg-gray-800 transition-colors">Iniciar Auditoria</button>
-              </div>
+      {/* Lado Direito - Formulários */}
+      <div className="w-full md:w-1/2 h-full flex items-center justify-center p-8 bg-gray-50 relative overflow-y-auto">
+        <div className="w-full max-w-md animate-fade-in">
+          
+          <div className="text-center md:text-left mb-10">
+             <h2 className="text-3xl font-black text-gray-900 mb-2">
+                {authMode === 'login' ? 'Bem-vindo de volta' : authMode === 'register' ? 'Crie sua conta' : authMode === 'recovery' ? 'Recuperar Acesso' : 'Nova Senha'}
+             </h2>
+             <p className="text-gray-500 font-medium">
+                {authMode === 'login' ? 'Acesse seu workspace.' : authMode === 'register' ? 'Inicie sua auditoria em segundos.' : 'Enviaremos um link mágico para você.'}
+             </p>
+          </div>
+
+          {msg.text && (
+             <div className={`p-4 rounded-xl font-bold text-sm mb-6 flex items-center gap-3 ${msg.type === 'error' ? 'bg-red-50 text-red-700 border border-red-100' : 'bg-green-50 text-green-700 border border-green-100'}`}>
+               {msg.type === 'error' ? <AlertCircle size={20}/> : <Mail size={20}/>} {msg.text}
+             </div>
+          )}
+
+          <form onSubmit={handleAuth} className="space-y-4">
+             {authMode !== 'update_password' && (
+               <div className="relative group">
+                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#F1C40F] transition-colors" size={20} />
+                 <input required type="email" placeholder="Seu e-mail corporativo" value={email} onChange={e => setEmail(e.target.value)} className="w-full bg-white border-2 border-gray-200 rounded-xl py-4 pl-12 pr-4 focus:border-[#F1C40F] focus:ring-4 focus:ring-yellow-50 outline-none font-bold text-gray-800 transition-all" />
+               </div>
+             )}
+
+             {(authMode === 'login' || authMode === 'register' || authMode === 'update_password') && (
+               <div className="relative group">
+                 <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-[#F1C40F] transition-colors" size={20} />
+                 <input required type="password" placeholder="Sua senha secreta" value={password} onChange={e => setPassword(e.target.value)} className="w-full bg-white border-2 border-gray-200 rounded-xl py-4 pl-12 pr-4 focus:border-[#F1C40F] focus:ring-4 focus:ring-yellow-50 outline-none font-bold text-gray-800 transition-all" />
+               </div>
+             )}
+
+             {authMode === 'login' && (
+               <div className="flex justify-end">
+                 <button type="button" onClick={() => { setAuthMode('recovery'); setMsg({type:'',text:''}); }} className="text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors">Esqueceu a senha?</button>
+               </div>
+             )}
+
+             <button disabled={isLoadingAuth} type="submit" className="w-full bg-[#1a1a1a] text-[#F1C40F] py-4 rounded-xl font-black text-lg hover:-translate-y-1 hover:shadow-xl transition-all flex justify-center items-center gap-2 mt-6">
+                {isLoadingAuth ? <Loader2 className="animate-spin" /> : (
+                  authMode === 'login' ? 'ENTRAR NA PLATAFORMA' : authMode === 'register' ? 'CRIAR MINHA CONTA' : authMode === 'recovery' ? 'ENVIAR LINK MAGICO' : 'ATUALIZAR SENHA'
+                )}
+             </button>
+          </form>
+
+          {/* Rodapé de Troca de Telas */}
+          <div className="mt-8 text-center">
+            {authMode === 'login' ? (
+              <p className="text-gray-500 font-medium">Não tem uma conta? <button onClick={() => { setAuthMode('register'); setMsg({type:'',text:''}); }} className="text-gray-900 font-black hover:underline">Solicite acesso</button></p>
             ) : (
-              <>
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-6 mb-8 w-full">
-                  <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between w-full">
-                    <div className="flex justify-between items-start mb-2">
-                      <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Volume Bruto</p>
-                      <div className="bg-blue-50 p-2 rounded-lg"><TrendingUp size={16} className="text-blue-500"/></div>
-                    </div>
-                    <p className="text-2xl xl:text-3xl font-black text-gray-800 break-words whitespace-normal leading-tight mt-2">
-                      R$ {resultados.valorBruto.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
-                    </p>
-                  </div>
-                  
-                  <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between w-full">
-                    <div className="flex justify-between items-start mb-2">
-                      <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Pagos Corretos</p>
-                      <div className="bg-green-50 p-2 rounded-lg"><CheckCircle2 size={16} className="text-green-500"/></div>
-                    </div>
-                    <p className="text-2xl xl:text-3xl font-black text-gray-800 break-words whitespace-normal leading-tight mt-2">{resultados.corretos.length} <span className="text-sm font-medium text-gray-400">pedidos</span></p>
-                    <div className="flex flex-col sm:flex-row gap-2 mt-4">
-                      <button onClick={() => exportarExcel(resultados.corretos, "Pagos_Corretamente")} className="flex-1 flex items-center justify-center gap-1 text-xs font-bold text-green-700 bg-green-50 hover:bg-green-100 py-2 rounded-lg transition-colors"><Download size={14}/> Excel</button>
-                      <button onClick={() => exportarPDF(resultados.corretos, "Pedidos Pagos Corretamente", "Pagos_Corretos_PDF")} className="flex-1 flex items-center justify-center gap-1 text-xs font-bold text-red-700 bg-red-50 hover:bg-red-100 py-2 rounded-lg transition-colors"><FileText size={14}/> PDF</button>
-                    </div>
-                  </div>
-
-                  <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex flex-col justify-between w-full">
-                    <div className="flex justify-between items-start mb-2">
-                      <p className="text-xs text-gray-500 font-bold uppercase tracking-wider">Em Prazo</p>
-                      <div className="bg-yellow-50 p-2 rounded-lg"><Hourglass size={16} className="text-yellow-600"/></div>
-                    </div>
-                    <p className="text-2xl xl:text-3xl font-black text-gray-800 break-words whitespace-normal leading-tight mt-2">{resultados.noPrazo.length} <span className="text-sm font-medium text-gray-400">pedidos</span></p>
-                  </div>
-                  
-                  <div className="bg-red-50 p-6 rounded-2xl shadow-sm border border-red-100 flex flex-col justify-between relative overflow-hidden w-full">
-                    <div className="absolute top-0 right-0 w-16 h-16 bg-red-100 rounded-bl-full -mr-8 -mt-8"></div>
-                    <div className="flex justify-between items-start mb-2 relative z-10">
-                      <p className="text-xs text-red-600 font-bold uppercase tracking-wider">Prejuízo (Cobrar)</p>
-                      <div className="bg-white p-2 rounded-lg shadow-sm"><AlertCircle size={16} className="text-red-600"/></div>
-                    </div>
-                    <p className="text-2xl xl:text-3xl font-black text-red-600 break-words whitespace-normal leading-tight mt-2 relative z-10">
-                      R$ {resultados.totalRetido.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-10 w-full">
-                  <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 h-96 flex flex-col w-full">
-                    <h3 className="text-lg font-bold text-gray-800 mb-6">Status dos Pedidos</h3>
-                    <div className="flex-1 min-h-0">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie data={resultados.chartStatus} cx="50%" cy="50%" innerRadius="55%" outerRadius="80%" paddingAngle={5} dataKey="value">
-                            {resultados.chartStatus.map((_: any, index: number) => (
-                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                            ))}
-                          </Pie>
-                          <RechartsTooltip formatter={(value: any) => [`${value} pedidos`, 'Quantidade']} />
-                          <Legend verticalAlign="bottom" height={36}/>
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-
-                  <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 h-96 flex flex-col w-full">
-                    <h3 className="text-lg font-bold text-gray-800 mb-6">Raio-X Financeiro</h3>
-                    <div className="flex-1 min-h-0">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={resultados.chartFinanceiro} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                          <XAxis dataKey="name" axisLine={false} tickLine={false} />
-                          <YAxis hide />
-                          <RechartsTooltip cursor={{fill: 'transparent'}} formatter={(value: any) => [`R$ ${Number(value).toLocaleString('pt-BR', {minimumFractionDigits:2})}`, 'Valor']} />
-                          <Bar dataKey="valor" radius={[8, 8, 8, 8]} maxBarSize={100}>
-                            {resultados.chartFinanceiro.map((_: any, index: number) => (
-                              <Cell key={`cell-${index}`} fill={index === 0 ? '#e74c3c' : '#10b981'} />
-                            ))}
-                          </Bar>
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-                </div>
-              </>
+              <p className="text-gray-500 font-medium">Lembrou seus dados? <button onClick={() => { setAuthMode('login'); setMsg({type:'',text:''}); }} className="text-gray-900 font-black hover:underline">Faça login</button></p>
             )}
           </div>
-        )}
 
-        {/* TAB 2: UPLOAD */}
-        {activeTab === 'upload' && (
-          <div className="w-full animate-fade-in">
-            <header className="mb-10 text-center md:text-left">
-              <h2 className="text-3xl md:text-4xl font-black text-gray-900 tracking-tight">Nova Auditoria</h2>
-              <p className="text-gray-500 mt-2">Faça o upload dos arquivos e nós enviaremos tudo em segurança para a nuvem.</p>
-            </header>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10 w-full">
-              <label className={`relative overflow-hidden border-2 border-dashed rounded-3xl p-10 flex flex-col items-center justify-center cursor-pointer transition-all duration-300 ${upsellerData.length > 0 ? 'border-[#10b981] bg-[#ecfdf5]' : 'border-gray-300 bg-white hover:border-[#F1C40F] hover:shadow-lg'}`}>
-                {upsellerData.length > 0 && <div className="absolute top-4 right-4 bg-[#10b981] text-white p-1 rounded-full"><CheckCircle2 size={20}/></div>}
-                <UploadCloud size={48} className={upsellerData.length > 0 ? 'text-[#10b981] mb-4' : 'text-gray-400 mb-4'} />
-                <p className="text-gray-700 mb-4 font-bold text-center">{upsellerData.length > 0 ? `${upsellerData.length} registros em memória` : '1. Relatório UPSELLER'}</p>
-                <div className="bg-[#1a1a1a] text-white px-8 py-3 rounded-full font-bold text-sm shadow-md hover:scale-105 transition-transform">Selecionar Arquivo</div>
-                <input type="file" accept=".xlsx, .xls, .csv" className="hidden" onChange={(e) => lerPlanilha(e, setUpsellerData, 'Upseller')} />
-              </label>
-
-              <label className={`relative overflow-hidden border-2 border-dashed rounded-3xl p-10 flex flex-col items-center justify-center cursor-pointer transition-all duration-300 ${kwaiData.length > 0 ? 'border-[#10b981] bg-[#ecfdf5]' : 'border-gray-300 bg-white hover:border-[#F1C40F] hover:shadow-lg'}`}>
-                {kwaiData.length > 0 && <div className="absolute top-4 right-4 bg-[#10b981] text-white p-1 rounded-full"><CheckCircle2 size={20}/></div>}
-                <FileSpreadsheet size={48} className={kwaiData.length > 0 ? 'text-[#10b981] mb-4' : 'text-gray-400 mb-4'} />
-                <p className="text-gray-700 mb-4 font-bold text-center">{kwaiData.length > 0 ? `${kwaiData.length} registros em memória` : '2. Extrato KWAI'}</p>
-                <div className="bg-[#F1C40F] text-[#1a1a1a] px-8 py-3 rounded-full font-bold text-sm shadow-md hover:scale-105 transition-transform">Selecionar Arquivo</div>
-                <input type="file" accept=".xlsx, .xls, .csv" className="hidden" onChange={(e) => lerPlanilha(e, setKwaiData, 'Kwai')} />
-              </label>
-            </div>
-
-            <button 
-              onClick={executarConciliacao} 
-              disabled={isSyncing}
-              className={`w-full relative overflow-hidden group font-black text-xl py-6 rounded-2xl shadow-xl uppercase tracking-widest flex items-center justify-center gap-3 transition-all ${isSyncing ? 'bg-gray-800 text-gray-400 cursor-not-allowed' : 'bg-[#1a1a1a] text-[#F1C40F] hover:shadow-2xl hover:-translate-y-1'}`}>
-              
-              {isSyncing ? (
-                <span className="relative z-10 flex items-center gap-2"><Loader2 className="animate-spin" size={24}/> Sincronizando com a Nuvem...</span>
-              ) : (
-                <>
-                  <span className="relative z-10 flex items-center gap-2">Processar e Salvar no Banco <Database size={24}/></span>
-                  <div className="absolute inset-0 bg-black w-0 group-hover:w-full transition-all duration-500 ease-out z-0"></div>
-                </>
-              )}
-            </button>
-          </div>
-        )}
-
-        {/* TAB 3: AGUARDANDO VENCIMENTO */}
-        {activeTab === 'aguardando' && (
-          <div className="w-full animate-fade-in">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-              <div>
-                <h2 className="text-3xl font-black text-gray-900 tracking-tight">Pedidos no Prazo</h2>
-                <p className="text-gray-500 mt-1">Ainda não completaram o ciclo logístico de 22 dias.</p>
-              </div>
-              {resultados && resultados.noPrazo.length > 0 && (
-                <div className="flex gap-2 w-full md:w-auto">
-                  <button onClick={() => exportarExcel(resultados.noPrazo, "Aguardando_Vencimento")} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-green-50 border border-green-200 text-green-700 px-6 py-3 rounded-xl font-bold shadow-sm hover:bg-green-100 transition-colors"><Download size={18}/> Excel</button>
-                  <button onClick={() => exportarPDF(resultados.noPrazo, "Pedidos Aguardando Vencimento", "NoPrazo_PDF")} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-red-50 border border-red-200 text-red-700 px-6 py-3 rounded-xl font-bold shadow-sm hover:bg-red-100 transition-colors"><FileText size={18}/> PDF</button>
-                </div>
-              )}
-            </div>
-            {!resultados ? ( <div className="bg-white rounded-3xl shadow-sm p-12 text-center border border-gray-100 text-gray-500 w-full">Nenhum dado disponível.</div> ) : (
-              <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden w-full">
-                <div className="max-h-[70vh] overflow-y-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead className="bg-gray-50 text-gray-500 text-xs uppercase font-bold sticky top-0 z-10 shadow-sm">
-                      <tr><th className="p-4 whitespace-nowrap">ID do Pedido</th><th className="p-4 whitespace-nowrap">Data Envio</th><th className="p-4 whitespace-nowrap">Vencimento</th><th className="p-4 text-right whitespace-nowrap">Valor</th></tr>
-                    </thead>
-                    <tbody className="text-sm">
-                      {resultados.noPrazo.map((item: any, idx: number) => (
-                        <tr key={idx} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                          <td className="p-4 font-mono font-bold text-gray-700">{item["ID do Pedido"]}</td>
-                          <td className="p-4 text-gray-500 whitespace-nowrap">{item["Data Envio"]}</td>
-                          <td className="p-4 text-yellow-600 font-semibold whitespace-nowrap">{item["Vencimento Esperado"]}</td>
-                          <td className="p-4 text-right font-bold text-gray-700 whitespace-nowrap">R$ {item["Valor Cliente (R$)"].toFixed(2)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {resultados.noPrazo.length === 0 && <p className="text-gray-400 text-center py-10">Lista vazia.</p>}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* TAB 4: FILA DE COBRANÇA */}
-        {activeTab === 'cobranca' && (
-          <div className="w-full animate-fade-in pb-10">
-             <header className="mb-8">
-              <h2 className="text-3xl md:text-4xl font-black text-gray-900 tracking-tight">Fila de Cobrança</h2>
-              <p className="text-gray-500 mt-1">Dossiês prontos para exportar e abrir chamado.</p>
-            </header>
-            {!resultados ? ( <div className="bg-white rounded-3xl shadow-sm p-12 text-center border border-gray-100 text-gray-500 w-full">Nenhum dado processado.</div> ) : (
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 w-full">
-                <div className="bg-white border border-gray-100 rounded-3xl shadow-sm flex flex-col h-[75vh] overflow-hidden w-full">
-                  <div className="bg-orange-50 p-4 lg:p-6 border-b border-orange-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                    <div>
-                      <h3 className="font-black text-orange-800 text-lg flex items-center gap-2"><Hourglass size={20}/> Pedidos Atrasados</h3>
-                      <p className="text-orange-600 text-xs mt-1">{resultados.atrasados.length} pedidos retidos</p>
-                    </div>
-                    <div className="flex gap-2 w-full sm:w-auto">
-                      <button onClick={() => exportarExcel(resultados.atrasados, "Atrasados_Kwai")} className="flex-1 sm:flex-none flex justify-center items-center gap-1 text-xs bg-green-100 text-green-800 px-4 py-2 rounded-lg font-bold hover:bg-green-200 transition-colors"><Download size={14}/> Excel</button>
-                      <button onClick={() => exportarPDF(resultados.atrasados, "Dossie de Pedidos Atrasados", "Atrasados_Kwai_PDF")} className="flex-1 sm:flex-none flex justify-center items-center gap-1 text-xs bg-red-100 text-red-800 px-4 py-2 rounded-lg font-bold hover:bg-red-200 transition-colors"><FileText size={14}/> PDF</button>
-                    </div>
-                  </div>
-                  <div className="overflow-y-auto flex-1 p-0">
-                    <table className="w-full text-left">
-                      <thead className="bg-gray-50 text-gray-400 text-xs uppercase font-bold sticky top-0 z-10 shadow-sm">
-                        <tr><th className="p-4">ID</th><th className="p-4 text-right">Valor Devido</th></tr>
-                      </thead>
-                      <tbody className="text-sm">
-                        {resultados.atrasados.map((item: any, idx: number) => (
-                          <tr key={idx} className="border-b border-gray-50 hover:bg-orange-50/50">
-                            <td className="p-4 font-mono font-bold text-gray-700">{item["ID do Pedido"]}</td>
-                            <td className="p-4 text-right font-black text-orange-600 whitespace-nowrap">R$ {item["Repasse Atrasado (R$)"].toFixed(2)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                <div className="bg-white border border-gray-100 rounded-3xl shadow-sm flex flex-col h-[75vh] overflow-hidden w-full">
-                  <div className="bg-red-50 p-4 lg:p-6 border-b border-red-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                    <div>
-                      <h3 className="font-black text-red-800 text-lg flex items-center gap-2"><AlertTriangle size={20}/> Taxa Indevida</h3>
-                      <p className="text-red-600 text-xs mt-1">{resultados.indevidos.length} fretes embutidos</p>
-                    </div>
-                    <div className="flex gap-2 w-full sm:w-auto">
-                      <button onClick={() => exportarExcel(resultados.indevidos, "TaxaIndevida_Kwai")} className="flex-1 sm:flex-none flex justify-center items-center gap-1 text-xs bg-green-100 text-green-800 px-4 py-2 rounded-lg font-bold hover:bg-green-200 transition-colors"><Download size={14}/> Excel</button>
-                      <button onClick={() => exportarPDF(resultados.indevidos, "Dossie de Taxas Indevidas", "TaxaIndevida_Kwai_PDF")} className="flex-1 sm:flex-none flex justify-center items-center gap-1 text-xs bg-red-100 text-red-800 px-4 py-2 rounded-lg font-bold hover:bg-red-200 transition-colors"><FileText size={14}/> PDF</button>
-                    </div>
-                  </div>
-                  <div className="overflow-y-auto flex-1 p-0">
-                    <table className="w-full text-left">
-                      <thead className="bg-gray-50 text-gray-400 text-xs uppercase font-bold sticky top-0 z-10 shadow-sm">
-                        <tr><th className="p-4">ID</th><th className="p-4 text-right">Valor Roubado</th></tr>
-                      </thead>
-                      <tbody className="text-sm">
-                        {resultados.indevidos.map((item: any, idx: number) => (
-                          <tr key={idx} className="border-b border-gray-50 hover:bg-red-50/50">
-                            <td className="p-4 font-mono font-bold text-gray-700">{item["ID do Pedido"]}</td>
-                            <td className="p-4 text-right font-black text-[#e74c3c] whitespace-nowrap">R$ {item["Roubo na Taxa (R$)"].toFixed(2)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
+        </div>
       </div>
     </div>
   );
