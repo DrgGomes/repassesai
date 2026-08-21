@@ -11,24 +11,76 @@ import {
 export default function Dashboard({ session }: any) {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isF5Loading, setIsF5Loading] = useState(true);
   const [upsellerData, setUpsellerData] = useState<any[]>([]);
   const [kwaiData, setKwaiData] = useState<any[]>([]);
   const [resultados, setResultados] = useState<any>(null);
   
   const [meusProdutos, setMeusProdutos] = useState<any[]>([]);
-  const [isCarregandoProdutos, setIsCarregandoProdutos] = useState(false);
 
   const COLORS = ['#10b981', '#F1C40F', '#e74c3c', '#94a3b8', '#6b7280'];
 
+  // O "SUPER F5": Carrega os produtos e o histórico financeiro ao abrir a tela
   useEffect(() => {
-    carregarProdutos();
+    const carregarTudo = async () => {
+      setIsF5Loading(true);
+      await carregarProdutos();
+      await carregarDashboardDoBanco();
+      setIsF5Loading(false);
+    };
+    carregarTudo();
   }, []);
 
   const carregarProdutos = async () => {
-    setIsCarregandoProdutos(true);
     const { data } = await supabase.from('produtos').select('*').eq('user_id', session.user.id);
     if (data) setMeusProdutos(data);
-    setIsCarregandoProdutos(false);
+  };
+
+  const carregarDashboardDoBanco = async () => {
+    const { data: dbOrders } = await supabase.from('pedidos_kwai').select('*').eq('user_id', session.user.id);
+    if (!dbOrders || dbOrders.length === 0) return;
+
+    let atrasados=[], indevidos=[], noPrazo=[], corretos=[], cancelados=[];
+    let valorBruto=0, totalRetido=0, custoTotal=0, lucroLiquido=0;
+
+    dbOrders.forEach(order => {
+       if (order.status === 'CANCELADO_DEVOLVIDO') {
+           cancelados.push({ "ID do Pedido": order.id_pedido, "Status": "Cancelado/Devolvido", "Valor Original (R$)": Number(order.valor_bruto) });
+       } else {
+           valorBruto += Number(order.valor_bruto);
+           custoTotal += Number(order.custo_pedido);
+           const repasseEsperado = order.valor_bruto - ((order.valor_bruto * 0.20) + ((order.qtd || 1) * 4.00));
+           
+           if (order.status === 'NO_PRAZO') {
+               noPrazo.push({ "ID do Pedido": order.id_pedido, "Vencimento Esperado": new Date(order.vencimento_esperado).toLocaleDateString(), "Valor Cliente (R$)": Number(order.valor_bruto) });
+           } else if (order.status === 'ATRASADO') {
+               atrasados.push({ "ID do Pedido": order.id_pedido, "Repasse Atrasado (R$)": Number(repasseEsperado.toFixed(2)) });
+               totalRetido += repasseEsperado;
+           } else if (order.status === 'TAXA_INDEVIDA') {
+               indevidos.push({ "ID do Pedido": order.id_pedido, "Roubo na Taxa (R$)": Number(order.roubo_taxa) });
+               totalRetido += Number(order.roubo_taxa);
+               lucroLiquido += Number(order.lucro_pedido);
+           } else if (order.status === 'PAGO_CORRETO') {
+               corretos.push({ "ID do Pedido": order.id_pedido, "Receita Kwai (R$)": Number(order.receita_kwai), "Lucro Líquido (R$)": Number(order.lucro_pedido) });
+               lucroLiquido += Number(order.lucro_pedido);
+           }
+       }
+    });
+
+    setResultados({
+        atrasados, indevidos, noPrazo, corretos, cancelados, 
+        valorBruto: Number(valorBruto.toFixed(2)), 
+        totalRetido: Number(totalRetido.toFixed(2)), 
+        custoTotal: Number(custoTotal.toFixed(2)),
+        lucroLiquido: Number(lucroLiquido.toFixed(2)),
+        chartStatus: [
+          {name:'Corretos',value:corretos.length},
+          {name:'Prazo',value:noPrazo.length},
+          {name:'Indevido',value:indevidos.length},
+          {name:'Atrasado',value:atrasados.length},
+          {name:'Cancelados',value:cancelados.length}
+        ].filter(i=>i.value>0) 
+    });
   };
 
   const lerPlanilha = (e: any, setDados: Function) => {
@@ -56,168 +108,131 @@ export default function Dashboard({ session }: any) {
 
   const exportarJSON = () => {
     if (!resultados) return alert("Processe os dados primeiro.");
-    const dossieAuditoria = {
-      informacoes_sistema: {
-        plataforma: "Repasse.AI SaaS",
-        regras_matematicas_aplicadas: "Taxa Base Kwai 20% + R$ 4,00 por item.",
-        data_auditoria: new Date().toISOString()
-      },
-      resumo_financeiro: {
-        volume_bruto_reais: resultados.valorBruto,
-        prejuizo_retido_reais: resultados.totalRetido,
-        custo_produtos_reais: resultados.custoTotal,
-        lucro_liquido_reais: resultados.lucroLiquido
-      },
-      detalhamento_pedidos: {
-        pagos_corretamente: resultados.corretos,
-        taxas_indevidas: resultados.indevidos,
-        atrasados_retidos: resultados.atrasados,
-        no_prazo_logistico: resultados.noPrazo,
-        ignorados_por_cancelamento: resultados.cancelados
-      }
-    };
-    const blob = new Blob([JSON.stringify(dossieAuditoria, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(resultados, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `Prova_Real_Auditoria_${new Date().getTime()}.json`;
+    a.download = `Prova_Real_Auditoria.json`;
     a.click();
   };
 
   const atualizarProduto = async (sku: string, custo: number, skuMaster: string) => {
-    const { error } = await supabase.from('produtos')
-      .update({ custo: custo, sku_master: skuMaster || null })
-      .eq('sku', sku).eq('user_id', session.user.id);
-    
+    const { error } = await supabase.from('produtos').update({ custo: custo, sku_master: skuMaster || null }).eq('sku', sku).eq('user_id', session.user.id);
     if (error) alert("Erro ao salvar produto.");
-    else alert("Produto atualizado com sucesso!");
-    carregarProdutos();
+    else {
+      alert("Produto atualizado! Faça uma Nova Auditoria para recalcular o DRE com o novo custo.");
+      carregarProdutos();
+    }
+  };
+
+  // EXTRATOR INTELIGENTE DE COLUNAS
+  const extrair = (row: any, palavras: string[]) => {
+    const chave = Object.keys(row).find(k => palavras.some(p => k.toLowerCase().includes(p)));
+    return chave ? row[chave] : null;
   };
 
   const executarConciliacao = async () => {
-    if (upsellerData.length === 0 || kwaiData.length === 0) return alert("⚠️ Suba os arquivos.");
+    if (upsellerData.length === 0 && kwaiData.length === 0) return alert("⚠️ Suba os arquivos.");
     setIsSyncing(true);
 
+    // 1. AUTO-CADASTRO INTELIGENTE DE PRODUTOS
     const produtosExtraidos = new Map();
     upsellerData.forEach(row => {
-      const sku = row['SKU do Vendedor'] || row['SKU'] || row['Especificação do Produto'];
-      const nome = row['Nome do Produto'] || row['Produto'];
+      const sku = extrair(row, ['sku', 'especificação', 'código', 'id do produto']);
+      const nome = extrair(row, ['nome do produto', 'produto', 'título', 'nome']);
       if (sku && nome && !produtosExtraidos.has(sku)) {
-        produtosExtraidos.set(sku, { user_id: session.user.id, sku: String(sku), nome: String(nome) });
+        produtosExtraidos.set(String(sku).trim(), { user_id: session.user.id, sku: String(sku).trim(), nome: String(nome).trim() });
       }
     });
 
     if (produtosExtraidos.size > 0) {
-      const arrayNovosProdutos = Array.from(produtosExtraidos.values());
-      await supabase.from('produtos').upsert(arrayNovosProdutos, { onConflict: 'user_id,sku', ignoreDuplicates: true });
-      await carregarProdutos(); 
+      await supabase.from('produtos').upsert(Array.from(produtosExtraidos.values()), { onConflict: 'user_id,sku', ignoreDuplicates: true });
+      await carregarProdutos(); // Garante que a memória puxe os custos recém digitados/criados
     }
 
-    const { data: produtosBanco } = await supabase.from('produtos').select('*').eq('user_id', session.user.id);
     const mapaCustos = new Map();
-    if (produtosBanco) {
-      produtosBanco.forEach(p => mapaCustos.set(p.sku, p));
-    }
+    meusProdutos.forEach(p => mapaCustos.set(p.sku, p));
+
+    // 2. BUSCA O HISTÓRICO NO BANCO (FLUXO CONTÍNUO)
+    const { data: dbOrders } = await supabase.from('pedidos_kwai').select('*').eq('user_id', session.user.id);
+    const orderMap = new Map();
+    if (dbOrders) dbOrders.forEach(o => orderMap.set(o.id_pedido, o));
 
     let maxKwaiDate = new Date(0);
-    const kwaiLimpo: any[] = [];
-    const kwaiIds = new Set();
-    [...kwaiData].reverse().forEach(row => {
-      const idKwai = String(row['Número do pedido']);
-      if (!kwaiIds.has(idKwai) && row['Status de liquidação'] !== 'Cancelar') {
-        kwaiIds.add(idKwai);
-        kwaiLimpo.push(row);
-      }
-      const dataStr = row['Data de conclusão do pedido'] || row['Data de geração do pedido'];
-      if (dataStr) {
-        const d = new Date(dataStr.toString().replace(' ', 'T'));
-        if (d > maxKwaiDate) maxKwaiDate = d;
-      }
+    kwaiData.forEach(r => {
+      const dStr = extrair(r, ['conclusão do pedido', 'geração do pedido', 'data']);
+      if (dStr) { const d = new Date(String(dStr).replace(' ', 'T')); if (d > maxKwaiDate) maxKwaiDate = d; }
     });
+    if (maxKwaiDate.getTime() === 0) maxKwaiDate = new Date(); // fallback se n subir kwai
 
-    const upsellerLimpo: any[] = [];
-    const upIds = new Set();
+    // 3. REGISTRA AS NOVAS VENDAS (UPSELLER)
     upsellerData.forEach(row => {
-      const idPedido = String(row['Nº de Pedido da Plataforma']);
-      if (!upIds.has(idPedido)) { upIds.add(idPedido); upsellerLimpo.push(row); }
-    });
-
-    let atrasados: any[] = [], indevidos: any[] = [], noPrazo: any[] = [], corretos: any[] = [], cancelados: any[] = [];
-    let valorBruto = 0, totalRetido = 0;
-    let custoTotalProdutos = 0, lucroLiquidoTotal = 0;
-    
-    upsellerLimpo.forEach(upRow => {
-      const statusPos = upRow['Pós-venda/Cancelado/Devolvido'];
-      const idPedido = String(upRow['Nº de Pedido da Plataforma']);
-      const valorPedido = Number(upRow['Valor do Pedido']) || 0;
-      const dataStr = upRow['Hora de Envio'] || upRow['Hora do Pedido'];
-      const dEnvio = dataStr ? new Date(dataStr.toString().replace(' ', 'T')) : new Date(0);
+      const idPedido = String(extrair(row, ['nº de pedido', 'pedido', 'order id']) || '');
+      if (!idPedido) return;
+      
+      const statusPos = extrair(row, ['pós-venda', 'cancelado', 'devolvido', 'status']);
+      const valorPedido = Number(extrair(row, ['valor do pedido', 'valor'])) || 0;
+      const dataStr = extrair(row, ['hora de envio', 'hora do pedido', 'data']);
+      const dEnvio = dataStr ? new Date(String(dataStr).replace(' ', 'T')) : new Date(0);
       const dVencimento = new Date(dEnvio.getTime() + (22 * 86400000));
+      
+      const sku = String(extrair(row, ['sku', 'especificação', 'código', 'id do produto'])).trim();
+      const qtd = Number(extrair(row, ['qtd', 'quantidade'])) || 1;
+      
+      const prodInfo = mapaCustos.get(sku);
+      const custoUnitario = prodInfo ? Number(prodInfo.custo) : 0;
+      
+      let status = "NO_PRAZO";
+      if (String(statusPos).includes('Cancelado')) status = "CANCELADO_DEVOLVIDO";
+      else if (dVencimento < maxKwaiDate) status = "ATRASADO";
 
-      if (statusPos === 'Cancelado' || statusPos === 'Cancelado/Pós-vendas') {
-        cancelados.push({ "ID do Pedido": idPedido, "Status Upseller": statusPos, "Valor Original (R$)": valorPedido });
-        return; 
-      }
-      
-      const qtd = Number(upRow['Qtd. do Produto']) || 1;
-      const skuRaw = String(upRow['SKU do Vendedor'] || upRow['SKU'] || upRow['Especificação do Produto']);
-      
-      const produtoInfo = mapaCustos.get(skuRaw);
-      const custoUnitario = produtoInfo ? Number(produtoInfo.custo) : 0;
-      const custoDoPedido = custoUnitario * qtd;
-      custoTotalProdutos += custoDoPedido;
-      
-      valorBruto += valorPedido;
-      const kwaiRow = kwaiLimpo.find(k => String(k['Número do pedido']) === idPedido);
-      const taxa = (valorPedido * 0.20) + (qtd * 4.00);
-      const repasseEsperado = valorPedido - taxa;
-      
-      let recKwai = 0;
-
-      if (!kwaiRow) {
-        if (dVencimento > maxKwaiDate) {
-          noPrazo.push({ "ID do Pedido": idPedido, "Data Envio": dEnvio.toLocaleDateString(), "Vencimento Esperado": dVencimento.toLocaleDateString(), "Valor Cliente (R$)": valorPedido });
-        } else {
-          atrasados.push({ "ID do Pedido": idPedido, "Repasse Atrasado (R$)": Number(repasseEsperado.toFixed(2)) });
-          totalRetido += repasseEsperado;
-        }
-      } else {
-        recKwai = Number(kwaiRow['Receita']) || 0;
-        const cobradoAMais = (valorPedido - recKwai) - taxa;
-        
-        const lucroDoPedido = recKwai - custoDoPedido;
-        lucroLiquidoTotal += lucroDoPedido;
-
-        if (cobradoAMais > 0.50) {
-          indevidos.push({ "ID do Pedido": idPedido, "Valor Original (R$)": valorPedido, "Receita Kwai (R$)": recKwai, "Roubo na Taxa (R$)": Number(cobradoAMais.toFixed(2)) });
-          totalRetido += cobradoAMais;
-        } else {
-          corretos.push({ "ID do Pedido": idPedido, "Receita Kwai (R$)": recKwai, "Lucro Líquido (R$)": Number(lucroDoPedido.toFixed(2)) });
-        }
+      if (!orderMap.has(idPedido)) {
+        orderMap.set(idPedido, { id_pedido: idPedido, valor_bruto: valorPedido, data_envio: dEnvio.toISOString(), vencimento_esperado: dVencimento.toISOString(), status: status, receita_kwai: 0, roubo_taxa: 0, custo_pedido: (custoUnitario * qtd), lucro_pedido: 0, sku: sku, qtd: qtd, user_id: session.user.id });
       }
     });
 
-    const valorBrutoFinal = Number(valorBruto.toFixed(2));
-    const totalRetidoFinal = Number(totalRetido.toFixed(2));
-    const custoTotalFinal = Number(custoTotalProdutos.toFixed(2));
-    const lucroLiquidoFinal = Number(lucroLiquidoTotal.toFixed(2));
-
-    setResultados({ 
-      atrasados, indevidos, noPrazo, corretos, cancelados, 
-      valorBruto: valorBrutoFinal, 
-      totalRetido: totalRetidoFinal, 
-      custoTotal: custoTotalFinal,
-      lucroLiquido: lucroLiquidoFinal,
-      chartStatus: [
-        {name:'Corretos',value:corretos.length},
-        {name:'Prazo',value:noPrazo.length},
-        {name:'Indevido',value:indevidos.length},
-        {name:'Atrasado',value:atrasados.length},
-        {name:'Cancelados',value:cancelados.length}
-      ].filter(i=>i.value>0) 
+    // 4. DA BAIXA NOS PAGAMENTOS (KWAI) - PROCURA INCLUSIVE NO HISTÓRICO!
+    kwaiData.forEach(row => {
+      const idKwai = String(extrair(row, ['número do pedido', 'pedido', 'id']) || '');
+      const statusLiq = extrair(row, ['status de liquidação', 'status']);
+      if (!idKwai || String(statusLiq).includes('Cancelar')) return;
+      
+      const recKwai = Number(extrair(row, ['receita', 'valor', 'repasse'])) || 0;
+      let order = orderMap.get(idKwai);
+      
+      if (order && order.status !== 'CANCELADO_DEVOLVIDO') {
+         const taxaRegra = (order.valor_bruto * 0.20) + (order.qtd * 4.00);
+         const cobradoAMais = (order.valor_bruto - recKwai) - taxaRegra;
+         
+         order.receita_kwai = recKwai;
+         order.lucro_pedido = recKwai - order.custo_pedido;
+         
+         if (cobradoAMais > 0.50) {
+            order.roubo_taxa = cobradoAMais;
+            order.status = "TAXA_INDEVIDA";
+         } else {
+            order.roubo_taxa = 0;
+            order.status = "PAGO_CORRETO";
+         }
+      }
     });
+
+    // 5. SALVA TUDO E ATUALIZA A TELA
+    const registrosParaSalvar = Array.from(orderMap.values());
+    try {
+      for (let i = 0; i < registrosParaSalvar.length; i += 500) {
+        await supabase.from('pedidos_kwai').upsert(registrosParaSalvar.slice(i, i + 500), { onConflict: 'user_id,id_pedido' });
+      }
+    } catch (e) { console.error(e) }
+
+    await carregarDashboardDoBanco(); // Puxa do banco atualizadíssimo
     setIsSyncing(false);
+    setActiveTab('dashboard');
   };
+
+  if (isF5Loading) {
+    return <div className="h-screen w-full flex items-center justify-center bg-gray-100"><Loader2 className="animate-spin text-[#F1C40F]" size={48} /></div>;
+  }
 
   return (
     <div className="flex h-screen w-full bg-gray-100 overflow-hidden font-sans">
@@ -241,7 +256,6 @@ export default function Dashboard({ session }: any) {
 
       <div className="flex-1 h-full overflow-y-auto p-8">
         
-        {/* TAB 1: VISÃO GERAL */}
         {activeTab === 'dashboard' && resultados && (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 w-full animate-fade-in">
              <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center h-80 relative">
@@ -275,7 +289,6 @@ export default function Dashboard({ session }: any) {
            </div>
         )}
 
-        {/* TAB 2: UPLOAD */}
         {activeTab === 'upload' && (
           <div className="w-full flex flex-col items-center gap-6 animate-fade-in">
              <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-8 mb-4">
@@ -283,12 +296,11 @@ export default function Dashboard({ session }: any) {
               <label className="border-2 border-dashed border-gray-300 bg-white rounded-3xl p-10 flex flex-col items-center cursor-pointer hover:border-[#F1C40F] transition-all"><FileSpreadsheet size={48} className="text-gray-400 mb-4"/><p className="font-bold text-gray-700">{kwaiData.length > 0 ? `${kwaiData.length} registros (Kwai)` : '2. Upload KWAI'}</p><input type="file" className="hidden" onChange={(e) => lerPlanilha(e, setKwaiData)} /></label>
             </div>
             <button onClick={executarConciliacao} disabled={isSyncing} className={`w-full py-6 rounded-2xl shadow-xl font-black text-xl uppercase tracking-widest flex items-center justify-center gap-3 transition-all ${isSyncing ? 'bg-gray-800 text-gray-400 cursor-not-allowed' : 'bg-[#1a1a1a] text-[#F1C40F] hover:-translate-y-1'}`}>
-              {isSyncing ? <><Loader2 className="animate-spin" size={24}/> Processando Nuvem...</> : <><Database size={24}/> Processar Relatórios</>}
+              {isSyncing ? <><Loader2 className="animate-spin" size={24}/> Sincronizando com a Nuvem...</> : <><Database size={24}/> Processar Relatórios e Salvar</>}
             </button>
           </div>
         )}
 
-        {/* TAB 3: AGUARDANDO NO PRAZO */}
         {activeTab === 'aguardando' && (
           <div className="w-full animate-fade-in">
             <header className="mb-8 flex justify-between items-center">
@@ -303,13 +315,12 @@ export default function Dashboard({ session }: any) {
                 <div className="overflow-y-auto h-full p-0">
                   <table className="w-full text-left border-collapse">
                     <thead className="bg-gray-50 text-gray-500 text-xs uppercase font-bold sticky top-0 z-10 shadow-sm">
-                      <tr><th className="p-4">ID do Pedido</th><th className="p-4">Data Envio</th><th className="p-4">Vencimento Esperado</th><th className="p-4 text-right">Valor Cliente (R$)</th></tr>
+                      <tr><th className="p-4">ID do Pedido</th><th className="p-4">Vencimento Esperado</th><th className="p-4 text-right">Valor Cliente (R$)</th></tr>
                     </thead>
                     <tbody className="text-sm">
                       {resultados.noPrazo.map((item: any, idx: number) => (
                         <tr key={idx} className="border-b border-gray-50 hover:bg-gray-50">
                           <td className="p-4 font-mono font-bold text-gray-700">{item["ID do Pedido"]}</td>
-                          <td className="p-4 text-gray-500">{item["Data Envio"]}</td>
                           <td className="p-4 text-yellow-600 font-semibold">{item["Vencimento Esperado"]}</td>
                           <td className="p-4 text-right font-bold text-gray-700">R$ {item["Valor Cliente (R$)"].toFixed(2)}</td>
                         </tr>
@@ -323,7 +334,6 @@ export default function Dashboard({ session }: any) {
           </div>
         )}
 
-        {/* TAB 4: FILA DE COBRANÇA */}
         {activeTab === 'cobranca' && (
           <div className="w-full animate-fade-in pb-10">
              <header className="mb-8">
@@ -332,8 +342,6 @@ export default function Dashboard({ session }: any) {
             </header>
             {!resultados ? ( <div className="bg-white rounded-3xl shadow-sm p-12 text-center border border-gray-100 text-gray-500 w-full">Nenhum dado processado.</div> ) : (
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 w-full">
-                
-                {/* ATRASADOS */}
                 <div className="bg-white border border-gray-100 rounded-3xl shadow-sm flex flex-col h-[75vh] overflow-hidden w-full">
                   <div className="bg-orange-50 p-4 border-b border-orange-100 flex justify-between items-center">
                     <div>
@@ -359,7 +367,6 @@ export default function Dashboard({ session }: any) {
                   </div>
                 </div>
 
-                {/* TAXAS INDEVIDAS */}
                 <div className="bg-white border border-gray-100 rounded-3xl shadow-sm flex flex-col h-[75vh] overflow-hidden w-full">
                   <div className="bg-red-50 p-4 border-b border-red-100 flex justify-between items-center">
                     <div>
@@ -384,13 +391,11 @@ export default function Dashboard({ session }: any) {
                     </table>
                   </div>
                 </div>
-
               </div>
             )}
           </div>
         )}
 
-        {/* TAB 5: MALHA FINA (Cancelados) */}
         {activeTab === 'malhafina' && (
           <div className="w-full animate-fade-in">
             <header className="mb-8 flex justify-between items-center">
@@ -405,13 +410,13 @@ export default function Dashboard({ session }: any) {
                 <div className="overflow-y-auto h-full p-0">
                   <table className="w-full text-left border-collapse">
                     <thead className="bg-gray-100 text-gray-500 text-xs uppercase font-bold sticky top-0 z-10 shadow-sm">
-                      <tr><th className="p-4">ID do Pedido</th><th className="p-4">Status Upseller</th><th className="p-4 text-right">Valor Original</th></tr>
+                      <tr><th className="p-4">ID do Pedido</th><th className="p-4">Status</th><th className="p-4 text-right">Valor Original</th></tr>
                     </thead>
                     <tbody className="text-sm">
                       {resultados.cancelados.map((item: any, idx: number) => (
                         <tr key={idx} className="border-b border-gray-50 hover:bg-gray-50">
                           <td className="p-4 font-mono font-bold text-gray-700">{item["ID do Pedido"]}</td>
-                          <td className="p-4 font-bold text-red-500">{item["Status Upseller"]}</td>
+                          <td className="p-4 font-bold text-red-500">{item["Status"]}</td>
                           <td className="p-4 text-right font-black text-gray-700">R$ {item["Valor Original (R$)"].toFixed(2)}</td>
                         </tr>
                       ))}
@@ -424,21 +429,18 @@ export default function Dashboard({ session }: any) {
           </div>
         )}
 
-        {/* TAB 6: PRODUTOS */}
         {activeTab === 'produtos' && (
           <div className="w-full animate-fade-in">
             <header className="mb-8 flex justify-between items-end">
               <div>
                 <h2 className="text-3xl font-black text-gray-900 tracking-tight">Meus Produtos & Custos</h2>
-                <p className="text-gray-500 mt-1">Os SKUs são cadastrados automaticamente quando você audita uma planilha.</p>
+                <p className="text-gray-500 mt-1">Os SKUs são extraídos automaticamente da sua planilha.</p>
               </div>
               <button onClick={carregarProdutos} className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-bold text-sm">Atualizar Lista</button>
             </header>
             <div className="bg-white border border-gray-100 rounded-3xl shadow-sm overflow-hidden">
-               {isCarregandoProdutos ? (
-                 <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-gray-400" size={32}/></div>
-               ) : meusProdutos.length === 0 ? (
-                 <div className="p-10 text-center text-gray-400">Nenhum produto cadastrado. Suba uma planilha na aba "Nova Auditoria".</div>
+               {meusProdutos.length === 0 ? (
+                 <div className="p-10 text-center text-gray-400">Nenhum produto cadastrado. Processe uma planilha na aba "Nova Auditoria".</div>
                ) : (
                  <div className="max-h-[65vh] overflow-y-auto p-0">
                    <table className="w-full text-left">
@@ -450,19 +452,9 @@ export default function Dashboard({ session }: any) {
                          <tr key={prod.id} className="border-b border-gray-50 hover:bg-gray-50">
                            <td className="p-4 font-mono font-bold text-gray-600">{prod.sku}</td>
                            <td className="p-4 text-gray-600 truncate max-w-xs" title={prod.nome}>{prod.nome}</td>
-                           <td className="p-4">
-                             <input type="number" step="0.01" defaultValue={prod.custo} id={`custo-${prod.sku}`} className="w-24 bg-white border border-gray-300 rounded p-2 focus:border-[#F1C40F] outline-none" />
-                           </td>
-                           <td className="p-4">
-                             <input type="text" placeholder="Ex: SKU-MASTER" defaultValue={prod.sku_master || ''} id={`master-${prod.sku}`} className="w-32 bg-white border border-gray-300 rounded p-2 focus:border-[#F1C40F] outline-none" />
-                           </td>
-                           <td className="p-4">
-                             <button onClick={() => {
-                               const custo = (document.getElementById(`custo-${prod.sku}`) as HTMLInputElement).value;
-                               const master = (document.getElementById(`master-${prod.sku}`) as HTMLInputElement).value;
-                               atualizarProduto(prod.sku, Number(custo), master);
-                             }} className="bg-green-100 text-green-700 p-2 rounded-lg hover:bg-green-200 transition-colors"><Save size={18}/></button>
-                           </td>
+                           <td className="p-4"><input type="number" step="0.01" defaultValue={prod.custo} id={`custo-${prod.sku}`} className="w-24 bg-white border border-gray-300 rounded p-2 focus:border-[#F1C40F] outline-none" /></td>
+                           <td className="p-4"><input type="text" placeholder="SKU Master" defaultValue={prod.sku_master || ''} id={`master-${prod.sku}`} className="w-32 bg-white border border-gray-300 rounded p-2 focus:border-[#F1C40F] outline-none" /></td>
+                           <td className="p-4"><button onClick={() => { const custo = (document.getElementById(`custo-${prod.sku}`) as HTMLInputElement).value; const master = (document.getElementById(`master-${prod.sku}`) as HTMLInputElement).value; atualizarProduto(prod.sku, Number(custo), master); }} className="bg-green-100 text-green-700 p-2 rounded-lg hover:bg-green-200 transition-colors"><Save size={18}/></button></td>
                          </tr>
                        ))}
                      </tbody>
@@ -473,7 +465,6 @@ export default function Dashboard({ session }: any) {
           </div>
         )}
 
-        {/* TAB 7: LUCRATIVIDADE */}
         {activeTab === 'lucro' && (
           <div className="w-full animate-fade-in">
             <header className="mb-8">
