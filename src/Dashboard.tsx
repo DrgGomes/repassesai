@@ -5,7 +5,7 @@ import {
   PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, Legend 
 } from 'recharts';
 import { 
-  LayoutDashboard, UploadCloud, Hourglass, Download, FileSpreadsheet, AlertTriangle, Loader2, Database, LogOut
+  LayoutDashboard, UploadCloud, Hourglass, Download, FileSpreadsheet, AlertTriangle, Loader2, Database, LogOut, FileJson, Ban
 } from 'lucide-react';
 
 export default function Dashboard({ session }: any) {
@@ -15,9 +15,8 @@ export default function Dashboard({ session }: any) {
   const [kwaiData, setKwaiData] = useState<any[]>([]);
   const [resultados, setResultados] = useState<any>(null);
 
-  const COLORS = ['#10b981', '#F1C40F', '#e74c3c', '#94a3b8'];
+  const COLORS = ['#10b981', '#F1C40F', '#e74c3c', '#94a3b8', '#6b7280'];
 
-  // Limpei o parâmetro "nomeSistema" que não estava sendo usado
   const lerPlanilha = (e: any, setDados: Function) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -44,6 +43,36 @@ export default function Dashboard({ session }: any) {
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Relatório");
     XLSX.writeFile(workbook, `${nomeArquivo}.xlsx`);
+  };
+
+  // NOVA FERRAMENTA: EXPORTAÇÃO JSON PARA AUDITORIA (PROVA REAL)
+  const exportarJSON = () => {
+    if (!resultados) return alert("Processe os dados primeiro.");
+    const dossieAuditoria = {
+      informacoes_sistema: {
+        plataforma: "Repasse.AI SaaS",
+        regras_matematicas_aplicadas: "Taxa Base Kwai 20% + R$ 4,00 por item.",
+        data_auditoria: new Date().toISOString()
+      },
+      resumo_financeiro: {
+        volume_bruto_reais: resultados.valorBruto,
+        prejuizo_retido_reais: resultados.totalRetido
+      },
+      detalhamento_pedidos: {
+        pagos_corretamente: resultados.corretos,
+        taxas_indevidas: resultados.indevidos,
+        atrasados_retidos: resultados.atrasados,
+        no_prazo_logistico: resultados.noPrazo,
+        ignorados_por_cancelamento: resultados.cancelados // Transparência total
+      }
+    };
+
+    const blob = new Blob([JSON.stringify(dossieAuditoria, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Prova_Real_Auditoria_${new Date().getTime()}.json`;
+    a.click();
   };
 
   const executarConciliacao = async () => {
@@ -76,22 +105,46 @@ export default function Dashboard({ session }: any) {
       }
     });
 
-    let atrasados: any[] = [], indevidos: any[] = [], noPrazo: any[] = [], corretos: any[] = [];
+    // Adicionado o array "cancelados"
+    let atrasados: any[] = [], indevidos: any[] = [], noPrazo: any[] = [], corretos: any[] = [], cancelados: any[] = [];
     let valorBruto = 0, totalRetido = 0;
     const registrosBanco: any[] = [];
 
     upsellerLimpo.forEach(upRow => {
-      if (upRow['Pós-venda/Cancelado/Devolvido'] === 'Cancelado') return;
+      const statusPos = upRow['Pós-venda/Cancelado/Devolvido'];
       const idPedido = String(upRow['Nº de Pedido da Plataforma']);
       const valorPedido = Number(upRow['Valor do Pedido']) || 0;
+      const dEnvio = parseDataStr(upRow['Hora de Envio'] || upRow['Hora do Pedido']);
+      const dVencimento = new Date(dEnvio.getTime() + (22 * 86400000));
+
+      // AGORA NÃO IGNORAMOS MAIS SILENCIOSAMENTE. NÓS CATALOGAMOS!
+      if (statusPos === 'Cancelado' || statusPos === 'Cancelado/Pós-vendas') {
+        cancelados.push({
+          "ID do Pedido": idPedido,
+          "Status Upseller": statusPos,
+          "Valor Original (R$)": valorPedido
+        });
+        
+        // Salva no banco com status CANCELADO para manter o histórico 100% íntegro
+        registrosBanco.push({
+          id_pedido: idPedido,
+          valor_bruto: valorPedido,
+          data_envio: dEnvio.toISOString(),
+          vencimento_esperado: dVencimento.toISOString(),
+          status: "CANCELADO_DEVOLVIDO",
+          receita_kwai: 0,
+          roubo_taxa: 0,
+          data_ultima_leitura: new Date().toISOString(),
+          user_id: session.user.id 
+        });
+        return; // Sai deste pedido e vai pro próximo
+      }
+      
       const qtd = Number(upRow['Qtd. do Produto']) || 1;
       valorBruto += valorPedido;
       const kwaiRow = kwaiLimpo.find(k => String(k['Número do pedido']) === idPedido);
       const taxa = (valorPedido * 0.20) + (qtd * 4.00);
       const repasseEsperado = valorPedido - taxa;
-      
-      const dEnvio = parseDataStr(upRow['Hora de Envio'] || upRow['Hora do Pedido']);
-      const dVencimento = new Date(dEnvio.getTime() + (22 * 86400000));
       
       let statusBanco = "", recKwai = 0, roubo = 0;
 
@@ -140,13 +193,22 @@ export default function Dashboard({ session }: any) {
       console.error(err);
     }
 
-    setResultados({ atrasados, indevidos, noPrazo, corretos, valorBruto, totalRetido, chartStatus: [{name:'Corretos',value:corretos.length},{name:'Prazo',value:noPrazo.length},{name:'Indevido',value:indevidos.length},{name:'Atrasado',value:atrasados.length}].filter(i=>i.value>0) });
+    setResultados({ 
+      atrasados, indevidos, noPrazo, corretos, cancelados, valorBruto, totalRetido, 
+      chartStatus: [
+        {name:'Corretos',value:corretos.length},
+        {name:'Prazo',value:noPrazo.length},
+        {name:'Indevido',value:indevidos.length},
+        {name:'Atrasado',value:atrasados.length},
+        {name:'Cancelados',value:cancelados.length}
+      ].filter(i=>i.value>0) 
+    });
     setIsSyncing(false);
   };
 
   return (
     <div className="flex h-screen w-full bg-gray-100 overflow-hidden font-sans">
-      <div className="w-64 bg-[#1a1a1a] text-white flex-shrink-0 p-6 flex flex-col justify-between">
+      <div className="w-64 bg-[#1a1a1a] text-white flex-shrink-0 p-6 flex flex-col justify-between overflow-y-auto">
         <div>
           <h1 className="text-2xl font-black mb-8 tracking-widest">REPASSE<span className="text-[#F1C40F]">.AI</span></h1>
           <nav className="space-y-4">
@@ -154,6 +216,8 @@ export default function Dashboard({ session }: any) {
             <button onClick={() => setActiveTab('upload')} className={`w-full flex items-center gap-3 p-3 rounded-lg font-bold ${activeTab === 'upload' ? 'bg-[#F1C40F] text-black' : 'text-gray-400 hover:text-white'}`}><UploadCloud size={20}/> Nova Auditoria</button>
             <button onClick={() => setActiveTab('aguardando')} className={`w-full flex items-center gap-3 p-3 rounded-lg font-bold ${activeTab === 'aguardando' ? 'bg-[#F1C40F] text-black' : 'text-gray-400 hover:text-white'}`}><Hourglass size={20}/> No Prazo</button>
             <button onClick={() => setActiveTab('cobranca')} className={`w-full flex items-center gap-3 p-3 rounded-lg font-bold ${activeTab === 'cobranca' ? 'bg-[#F1C40F] text-black' : 'text-gray-400 hover:text-white'}`}><AlertTriangle size={20}/> Fila de Cobrança</button>
+            {/* NOVO MENU: MALHA FINA */}
+            <button onClick={() => setActiveTab('malhafina')} className={`w-full flex items-center gap-3 p-3 rounded-lg font-bold ${activeTab === 'malhafina' ? 'bg-[#F1C40F] text-black' : 'text-gray-400 hover:text-white'}`}><Ban size={20}/> Malha Fina</button>
           </nav>
         </div>
         
@@ -165,7 +229,13 @@ export default function Dashboard({ session }: any) {
       <div className="flex-1 h-full overflow-y-auto p-8">
         {activeTab === 'dashboard' && resultados && (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 w-full animate-fade-in">
-             <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center h-80">
+             <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center h-80 relative">
+              
+              {/* BOTÃO PROVA REAL NO DASHBOARD */}
+              <button onClick={exportarJSON} className="absolute top-6 right-6 flex items-center gap-2 text-xs font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded-lg transition-colors" title="Baixar dossiê completo para auditar no ChatGPT/Claude">
+                <FileJson size={16}/> Prova Real (JSON)
+              </button>
+
               <h2 className="text-xl font-bold mb-6 text-gray-800">Visão Geral Financeira</h2>
               <div className="grid grid-cols-2 gap-6">
                 <div className="bg-blue-50 p-6 rounded-2xl">
@@ -207,6 +277,7 @@ export default function Dashboard({ session }: any) {
           </div>
         )}
 
+        {/* Tabelas de Exportação */}
         {activeTab === 'aguardando' && (
            <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden w-full p-6 animate-fade-in">
              <div className="flex justify-between items-center mb-6">
@@ -236,6 +307,47 @@ export default function Dashboard({ session }: any) {
               </div>
            </div>
         )}
+
+        {/* NOVA ABA: MALHA FINA */}
+        {activeTab === 'malhafina' && (
+          <div className="w-full animate-fade-in">
+            <header className="mb-8">
+              <h2 className="text-3xl md:text-4xl font-black text-gray-900 tracking-tight">Malha Fina (Cancelados)</h2>
+              <p className="text-gray-500 mt-1">Pedidos que o sistema detectou como cancelados/devolvidos e separou para sua verificação manual.</p>
+            </header>
+            {!resultados ? ( <div className="bg-white rounded-3xl shadow-sm p-12 text-center border border-gray-100 text-gray-500 w-full">Nenhum dado processado.</div> ) : (
+              <div className="bg-white border border-gray-100 rounded-3xl shadow-sm flex flex-col overflow-hidden w-full max-h-[75vh]">
+                <div className="bg-gray-50 p-4 lg:p-6 border-b border-gray-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                  <div>
+                    <h3 className="font-black text-gray-800 text-lg flex items-center gap-2"><Ban size={20}/> Pedidos Ignorados</h3>
+                    <p className="text-gray-600 text-xs mt-1">{resultados.cancelados.length} pedidos não entraram no cálculo bruto.</p>
+                  </div>
+                  <div className="flex gap-2 w-full sm:w-auto">
+                    {resultados.cancelados.length > 0 && <button onClick={() => exportarExcel(resultados.cancelados, "Cancelados_Devolvidos")} className="flex-1 sm:flex-none flex justify-center items-center gap-1 text-xs bg-gray-200 text-gray-800 px-4 py-2 rounded-lg font-bold hover:bg-gray-300 transition-colors"><Download size={14}/> Exportar Excel</button>}
+                  </div>
+                </div>
+                <div className="overflow-y-auto flex-1 p-0">
+                  <table className="w-full text-left">
+                    <thead className="bg-gray-100 text-gray-500 text-xs uppercase font-bold sticky top-0 z-10 shadow-sm">
+                      <tr><th className="p-4">ID do Pedido</th><th className="p-4">Status Upseller</th><th className="p-4 text-right">Valor Original</th></tr>
+                    </thead>
+                    <tbody className="text-sm">
+                      {resultados.cancelados.map((item: any, idx: number) => (
+                        <tr key={idx} className="border-b border-gray-50 hover:bg-gray-100/50 transition-colors">
+                          <td className="p-4 font-mono font-bold text-gray-700">{item["ID do Pedido"]}</td>
+                          <td className="p-4 font-bold text-red-500 whitespace-nowrap">{item["Status Upseller"]}</td>
+                          <td className="p-4 text-right font-black text-gray-700 whitespace-nowrap">R$ {item["Valor Original (R$)"].toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {resultados.cancelados.length === 0 && <p className="text-gray-400 text-center py-10">Nenhum pedido cancelado encontrado nas planilhas.</p>}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
       </div>
     </div>
   );
