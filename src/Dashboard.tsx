@@ -1,16 +1,13 @@
 import { useState } from 'react';
 import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { supabase } from './supabase';
 import { 
-  PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, Legend 
+  PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, Legend 
 } from 'recharts';
 import { 
-  LayoutDashboard, UploadCloud, Hourglass, AlertCircle, Download, CheckCircle2, FileSpreadsheet, TrendingUp, AlertTriangle, FileText, Loader2, Database, LogOut
+  LayoutDashboard, UploadCloud, Hourglass, Download, FileSpreadsheet, AlertTriangle, Loader2, Database, LogOut
 } from 'lucide-react';
 
-// O Dashboard agora recebe a "sessão" do usuário logado
 export default function Dashboard({ session }: any) {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSyncing, setIsSyncing] = useState(false);
@@ -20,7 +17,8 @@ export default function Dashboard({ session }: any) {
 
   const COLORS = ['#10b981', '#F1C40F', '#e74c3c', '#94a3b8'];
 
-  const lerPlanilha = (e: any, setDados: Function, nomeSistema: string) => {
+  // Limpei o parâmetro "nomeSistema" que não estava sendo usado
+  const lerPlanilha = (e: any, setDados: Function) => {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
@@ -46,18 +44,6 @@ export default function Dashboard({ session }: any) {
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Relatório");
     XLSX.writeFile(workbook, `${nomeArquivo}.xlsx`);
-  };
-
-  const exportarPDF = (dados: any[], titulo: string, nomeArquivo: string) => {
-    if (!dados || dados.length === 0) return alert("Não há dados.");
-    const doc = new jsPDF();
-    doc.text(`REPASSE.AI - ${titulo}`, 14, 15);
-    autoTable(doc, {
-      head: [Object.keys(dados[0])],
-      body: dados.map(obj => Object.values(obj)),
-      startY: 25,
-    });
-    doc.save(`${nomeArquivo}.pdf`);
   };
 
   const executarConciliacao = async () => {
@@ -132,7 +118,6 @@ export default function Dashboard({ session }: any) {
         }
       }
 
-      // INJETANDO O ID DA EMPRESA (O CORAÇÃO DO SAAS)
       registrosBanco.push({
         id_pedido: idPedido,
         valor_bruto: valorPedido,
@@ -142,7 +127,7 @@ export default function Dashboard({ session }: any) {
         receita_kwai: recKwai,
         roubo_taxa: roubo,
         data_ultima_leitura: new Date().toISOString(),
-        user_id: session.user.id // <--- Trava de Segurança
+        user_id: session.user.id 
       });
     });
 
@@ -155,7 +140,7 @@ export default function Dashboard({ session }: any) {
       console.error(err);
     }
 
-    setResultados({ atrasados, indevidos, noPrazo, corretos, valorBruto, totalRetido, chartStatus: [{name:'Corretos',value:corretos.length},{name:'Prazo',value:noPrazo.length},{name:'Indevido',value:indevidos.length},{name:'Atrasado',value:atrasados.length}].filter(i=>i.value>0), chartFinanceiro: [{name:'Prejuízo',valor:totalRetido},{name:'Repassado',valor:valorBruto-totalRetido}] });
+    setResultados({ atrasados, indevidos, noPrazo, corretos, valorBruto, totalRetido, chartStatus: [{name:'Corretos',value:corretos.length},{name:'Prazo',value:noPrazo.length},{name:'Indevido',value:indevidos.length},{name:'Atrasado',value:atrasados.length}].filter(i=>i.value>0) });
     setIsSyncing(false);
   };
 
@@ -172,7 +157,6 @@ export default function Dashboard({ session }: any) {
           </nav>
         </div>
         
-        {/* BOTÃO DE SAIR (LOGOUT) */}
         <button onClick={() => supabase.auth.signOut()} className="w-full flex items-center justify-center gap-2 p-3 text-red-400 hover:bg-gray-800 rounded-lg transition-colors font-bold mt-auto border border-gray-800">
           <LogOut size={18}/> Sair do Sistema
         </button>
@@ -214,8 +198,8 @@ export default function Dashboard({ session }: any) {
         {activeTab === 'upload' && (
           <div className="w-full flex flex-col items-center gap-6 animate-fade-in">
              <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-8 mb-4">
-              <label className="border-2 border-dashed border-gray-300 bg-white rounded-3xl p-10 flex flex-col items-center cursor-pointer hover:border-[#F1C40F] transition-all"><UploadCloud size={48} className="text-gray-400 mb-4"/><p className="font-bold text-gray-700">{upsellerData.length > 0 ? `${upsellerData.length} registros (Upseller)` : '1. Upload UPSELLER'}</p><input type="file" className="hidden" onChange={(e) => lerPlanilha(e, setUpsellerData, 'Upseller')} /></label>
-              <label className="border-2 border-dashed border-gray-300 bg-white rounded-3xl p-10 flex flex-col items-center cursor-pointer hover:border-[#F1C40F] transition-all"><FileSpreadsheet size={48} className="text-gray-400 mb-4"/><p className="font-bold text-gray-700">{kwaiData.length > 0 ? `${kwaiData.length} registros (Kwai)` : '2. Upload KWAI'}</p><input type="file" className="hidden" onChange={(e) => lerPlanilha(e, setKwaiData, 'Kwai')} /></label>
+              <label className="border-2 border-dashed border-gray-300 bg-white rounded-3xl p-10 flex flex-col items-center cursor-pointer hover:border-[#F1C40F] transition-all"><UploadCloud size={48} className="text-gray-400 mb-4"/><p className="font-bold text-gray-700">{upsellerData.length > 0 ? `${upsellerData.length} registros (Upseller)` : '1. Upload UPSELLER'}</p><input type="file" className="hidden" onChange={(e) => lerPlanilha(e, setUpsellerData)} /></label>
+              <label className="border-2 border-dashed border-gray-300 bg-white rounded-3xl p-10 flex flex-col items-center cursor-pointer hover:border-[#F1C40F] transition-all"><FileSpreadsheet size={48} className="text-gray-400 mb-4"/><p className="font-bold text-gray-700">{kwaiData.length > 0 ? `${kwaiData.length} registros (Kwai)` : '2. Upload KWAI'}</p><input type="file" className="hidden" onChange={(e) => lerPlanilha(e, setKwaiData)} /></label>
             </div>
             <button onClick={executarConciliacao} disabled={isSyncing} className={`w-full py-6 rounded-2xl shadow-xl font-black text-xl uppercase tracking-widest flex items-center justify-center gap-3 transition-all ${isSyncing ? 'bg-gray-800 text-gray-400 cursor-not-allowed' : 'bg-[#1a1a1a] text-[#F1C40F] hover:-translate-y-1'}`}>
               {isSyncing ? <><Loader2 className="animate-spin" size={24}/> Processando Nuvem...</> : <><Database size={24}/> Processar Relatórios</>}
@@ -223,7 +207,6 @@ export default function Dashboard({ session }: any) {
           </div>
         )}
 
-        {/* Tabelas de Exportação */}
         {activeTab === 'aguardando' && (
            <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden w-full p-6 animate-fade-in">
              <div className="flex justify-between items-center mb-6">
