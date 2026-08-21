@@ -2,10 +2,10 @@ import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { supabase } from './supabase';
 import { 
-  PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, Legend, BarChart, Bar, XAxis, YAxis 
+  PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, Legend 
 } from 'recharts';
 import { 
-  LayoutDashboard, UploadCloud, Hourglass, Download, FileSpreadsheet, AlertTriangle, Loader2, Database, LogOut, FileJson, Ban, Package, LineChart, Save
+  LayoutDashboard, UploadCloud, Hourglass, FileSpreadsheet, AlertTriangle, Loader2, Database, LogOut, FileJson, Ban, Package, LineChart, Save
 } from 'lucide-react';
 
 export default function Dashboard({ session }: any) {
@@ -48,14 +48,6 @@ export default function Dashboard({ session }: any) {
     reader.readAsArrayBuffer(file);
   };
 
-  const exportarExcel = (dados: any[], nomeArquivo: string) => {
-    if (!dados || dados.length === 0) return alert("Não há dados.");
-    const worksheet = XLSX.utils.json_to_sheet(dados);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Relatório");
-    XLSX.writeFile(workbook, `${nomeArquivo}.xlsx`);
-  };
-
   const exportarJSON = () => {
     if (!resultados) return alert("Processe os dados primeiro.");
     const blob = new Blob([JSON.stringify(resultados, null, 2)], { type: 'application/json' });
@@ -93,9 +85,9 @@ export default function Dashboard({ session }: any) {
 
     if (produtosExtraidos.size > 0) {
       const arrayNovosProdutos = Array.from(produtosExtraidos.values());
-      // Salva no banco. O "ignoreDuplicates" faz ele pular os SKUs que já existem (não sobrescreve o custo que o user digitou)
+      // Salva no banco pulando as duplicatas
       await supabase.from('produtos').upsert(arrayNovosProdutos, { onConflict: 'user_id,sku', ignoreDuplicates: true });
-      await carregarProdutos(); // Atualiza a lista de produtos na memória com os custos
+      await carregarProdutos(); 
     }
 
     // MAPA DE CUSTOS PARA ACELERAR O CÁLCULO
@@ -152,7 +144,6 @@ export default function Dashboard({ session }: any) {
       const qtd = Number(upRow['Qtd. do Produto']) || 1;
       const skuRaw = String(upRow['SKU do Vendedor'] || upRow['SKU'] || upRow['Especificação do Produto']);
       
-      // LÓGICA DO PRODUTO: Pega o custo, e verifica se tem um SKU Agrupador (Master)
       const produtoInfo = mapaCustos.get(skuRaw);
       const custoUnitario = produtoInfo ? Number(produtoInfo.custo) : 0;
       const custoDoPedido = custoUnitario * qtd;
@@ -172,12 +163,10 @@ export default function Dashboard({ session }: any) {
           atrasados.push({ "ID": idPedido, "Atrasado": Number(repasseEsperado.toFixed(2)) });
           totalRetido += repasseEsperado;
         }
-        // Se não repassou ainda, não tem lucro finalizado.
       } else {
         recKwai = Number(kwaiRow['Receita']) || 0;
         const cobradoAMais = (valorPedido - recKwai) - taxa;
         
-        // CALCULO DO LUCRO: O que o Kwai me pagou - O Custo do meu Produto
         const lucroDoPedido = recKwai - custoDoPedido;
         lucroLiquidoTotal += lucroDoPedido;
 
@@ -218,7 +207,6 @@ export default function Dashboard({ session }: any) {
             <button onClick={() => setActiveTab('cobranca')} className={`w-full flex items-center gap-3 p-3 rounded-lg font-bold ${activeTab === 'cobranca' ? 'bg-[#F1C40F] text-black' : 'text-gray-400 hover:text-white'}`}><AlertTriangle size={20}/> Fila de Cobrança</button>
             <button onClick={() => setActiveTab('malhafina')} className={`w-full flex items-center gap-3 p-3 rounded-lg font-bold ${activeTab === 'malhafina' ? 'bg-[#F1C40F] text-black' : 'text-gray-400 hover:text-white'}`}><Ban size={20}/> Malha Fina</button>
             
-            {/* NOVAS ABAS DE PRODUTO E LUCRO */}
             <div className="h-px bg-gray-800 my-4"></div>
             <button onClick={() => setActiveTab('produtos')} className={`w-full flex items-center gap-3 p-3 rounded-lg font-bold ${activeTab === 'produtos' ? 'bg-[#F1C40F] text-black' : 'text-gray-400 hover:text-white'}`}><Package size={20}/> Meus Produtos</button>
             <button onClick={() => setActiveTab('lucro')} className={`w-full flex items-center gap-3 p-3 rounded-lg font-bold ${activeTab === 'lucro' ? 'bg-[#F1C40F] text-black' : 'text-gray-400 hover:text-white'}`}><LineChart size={20}/> Lucratividade</button>
@@ -229,7 +217,6 @@ export default function Dashboard({ session }: any) {
 
       <div className="flex-1 h-full overflow-y-auto p-8">
         
-        {/* DASHBOARD PRINCIPAL */}
         {activeTab === 'dashboard' && resultados && (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 w-full animate-fade-in">
              <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center h-80 relative">
@@ -263,7 +250,6 @@ export default function Dashboard({ session }: any) {
            </div>
         )}
 
-        {/* TELA DE UPLOAD (Inalterada) */}
         {activeTab === 'upload' && (
           <div className="w-full flex flex-col items-center gap-6 animate-fade-in">
              <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-8 mb-4">
@@ -276,7 +262,6 @@ export default function Dashboard({ session }: any) {
           </div>
         )}
 
-        {/* --- NOVA ABA: GESTÃO DE PRODUTOS --- */}
         {activeTab === 'produtos' && (
           <div className="w-full animate-fade-in">
             <header className="mb-8 flex justify-between items-end">
@@ -326,7 +311,6 @@ export default function Dashboard({ session }: any) {
           </div>
         )}
 
-        {/* --- NOVA ABA: LUCRATIVIDADE --- */}
         {activeTab === 'lucro' && (
           <div className="w-full animate-fade-in">
             <header className="mb-8">
@@ -354,7 +338,6 @@ export default function Dashboard({ session }: any) {
           </div>
         )}
 
-        {/* ABAS EXISTENTES ABAIXO (Aguardando, Cobrança, Malha Fina) */}
         {activeTab === 'aguardando' && <div className="p-10 bg-white rounded-xl shadow">Aba no Prazo (Mantida no código)</div>}
         {activeTab === 'cobranca' && <div className="p-10 bg-white rounded-xl shadow">Aba Fila de Cobrança (Mantida no código)</div>}
         {activeTab === 'malhafina' && <div className="p-10 bg-white rounded-xl shadow">Aba Malha Fina Cancelados (Mantida no código)</div>}
