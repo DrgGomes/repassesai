@@ -20,7 +20,6 @@ export default function Dashboard({ session }: any) {
 
   const COLORS = ['#10b981', '#F1C40F', '#e74c3c', '#94a3b8', '#6b7280'];
 
-  // O "SUPER F5": Carrega os produtos e o histórico financeiro ao abrir a tela
   useEffect(() => {
     const carregarTudo = async () => {
       setIsF5Loading(true);
@@ -40,8 +39,9 @@ export default function Dashboard({ session }: any) {
     const { data: dbOrders } = await supabase.from('pedidos_kwai').select('*').eq('user_id', session.user.id);
     if (!dbOrders || dbOrders.length === 0) return;
 
-    let atrasados=[], indevidos=[], noPrazo=[], corretos=[], cancelados=[];
-    let valorBruto=0, totalRetido=0, custoTotal=0, lucroLiquido=0;
+    // AQUI ESTÁ A CORREÇÃO DO TYPESCRIPT (: any[])
+    let atrasados: any[] = [], indevidos: any[] = [], noPrazo: any[] = [], corretos: any[] = [], cancelados: any[] = [];
+    let valorBruto = 0, totalRetido = 0, custoTotal = 0, lucroLiquido = 0;
 
     dbOrders.forEach(order => {
        if (order.status === 'CANCELADO_DEVOLVIDO') {
@@ -108,11 +108,31 @@ export default function Dashboard({ session }: any) {
 
   const exportarJSON = () => {
     if (!resultados) return alert("Processe os dados primeiro.");
-    const blob = new Blob([JSON.stringify(resultados, null, 2)], { type: 'application/json' });
+    const dossieAuditoria = {
+      informacoes_sistema: {
+        plataforma: "Repasse.AI SaaS",
+        regras_matematicas_aplicadas: "Taxa Base Kwai 20% + R$ 4,00 por item.",
+        data_auditoria: new Date().toISOString()
+      },
+      resumo_financeiro: {
+        volume_bruto_reais: resultados.valorBruto,
+        prejuizo_retido_reais: resultados.totalRetido,
+        custo_produtos_reais: resultados.custoTotal,
+        lucro_liquido_reais: resultados.lucroLiquido
+      },
+      detalhamento_pedidos: {
+        pagos_corretamente: resultados.corretos,
+        taxas_indevidas: resultados.indevidos,
+        atrasados_retidos: resultados.atrasados,
+        no_prazo_logistico: resultados.noPrazo,
+        ignorados_por_cancelamento: resultados.cancelados
+      }
+    };
+    const blob = new Blob([JSON.stringify(dossieAuditoria, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `Prova_Real_Auditoria.json`;
+    a.download = `Prova_Real_Auditoria_${new Date().getTime()}.json`;
     a.click();
   };
 
@@ -125,7 +145,6 @@ export default function Dashboard({ session }: any) {
     }
   };
 
-  // EXTRATOR INTELIGENTE DE COLUNAS
   const extrair = (row: any, palavras: string[]) => {
     const chave = Object.keys(row).find(k => palavras.some(p => k.toLowerCase().includes(p)));
     return chave ? row[chave] : null;
@@ -135,7 +154,6 @@ export default function Dashboard({ session }: any) {
     if (upsellerData.length === 0 && kwaiData.length === 0) return alert("⚠️ Suba os arquivos.");
     setIsSyncing(true);
 
-    // 1. AUTO-CADASTRO INTELIGENTE DE PRODUTOS
     const produtosExtraidos = new Map();
     upsellerData.forEach(row => {
       const sku = extrair(row, ['sku', 'especificação', 'código', 'id do produto']);
@@ -147,13 +165,12 @@ export default function Dashboard({ session }: any) {
 
     if (produtosExtraidos.size > 0) {
       await supabase.from('produtos').upsert(Array.from(produtosExtraidos.values()), { onConflict: 'user_id,sku', ignoreDuplicates: true });
-      await carregarProdutos(); // Garante que a memória puxe os custos recém digitados/criados
+      await carregarProdutos(); 
     }
 
     const mapaCustos = new Map();
     meusProdutos.forEach(p => mapaCustos.set(p.sku, p));
 
-    // 2. BUSCA O HISTÓRICO NO BANCO (FLUXO CONTÍNUO)
     const { data: dbOrders } = await supabase.from('pedidos_kwai').select('*').eq('user_id', session.user.id);
     const orderMap = new Map();
     if (dbOrders) dbOrders.forEach(o => orderMap.set(o.id_pedido, o));
@@ -163,9 +180,8 @@ export default function Dashboard({ session }: any) {
       const dStr = extrair(r, ['conclusão do pedido', 'geração do pedido', 'data']);
       if (dStr) { const d = new Date(String(dStr).replace(' ', 'T')); if (d > maxKwaiDate) maxKwaiDate = d; }
     });
-    if (maxKwaiDate.getTime() === 0) maxKwaiDate = new Date(); // fallback se n subir kwai
+    if (maxKwaiDate.getTime() === 0) maxKwaiDate = new Date(); 
 
-    // 3. REGISTRA AS NOVAS VENDAS (UPSELLER)
     upsellerData.forEach(row => {
       const idPedido = String(extrair(row, ['nº de pedido', 'pedido', 'order id']) || '');
       if (!idPedido) return;
@@ -191,7 +207,6 @@ export default function Dashboard({ session }: any) {
       }
     });
 
-    // 4. DA BAIXA NOS PAGAMENTOS (KWAI) - PROCURA INCLUSIVE NO HISTÓRICO!
     kwaiData.forEach(row => {
       const idKwai = String(extrair(row, ['número do pedido', 'pedido', 'id']) || '');
       const statusLiq = extrair(row, ['status de liquidação', 'status']);
@@ -217,7 +232,6 @@ export default function Dashboard({ session }: any) {
       }
     });
 
-    // 5. SALVA TUDO E ATUALIZA A TELA
     const registrosParaSalvar = Array.from(orderMap.values());
     try {
       for (let i = 0; i < registrosParaSalvar.length; i += 500) {
@@ -225,7 +239,7 @@ export default function Dashboard({ session }: any) {
       }
     } catch (e) { console.error(e) }
 
-    await carregarDashboardDoBanco(); // Puxa do banco atualizadíssimo
+    await carregarDashboardDoBanco(); 
     setIsSyncing(false);
     setActiveTab('dashboard');
   };
