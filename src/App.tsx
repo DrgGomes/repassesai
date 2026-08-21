@@ -122,7 +122,6 @@ export default function App() {
     let valorBruto = 0;
     let totalRetido = 0;
     
-    // Lista para mandarmos para o Banco de Dados (Supabase)
     const registrosBanco: any[] = [];
 
     upsellerLimpo.forEach(upRow => {
@@ -172,7 +171,6 @@ export default function App() {
         }
       }
 
-      // Prepara a gaveta para o Banco de Dados
       registrosBanco.push({
         id_pedido: idPedido,
         valor_bruto: valorPedido,
@@ -185,9 +183,7 @@ export default function App() {
       });
     });
 
-    // --- ENVIANDO PARA O SUPABASE EM LOTES ---
     try {
-      // Como podem ser milhares de pedidos, dividimos de 500 em 500 para não travar
       for (let i = 0; i < registrosBanco.length; i += 500) {
         const lote = registrosBanco.slice(i, i + 500);
         const { error } = await supabase.from('pedidos_kwai').upsert(lote);
@@ -213,7 +209,7 @@ export default function App() {
     ];
 
     setResultados({ atrasados, indevidos, noPrazo, corretos: corretosLista, valorBruto, totalRetido, maxKwaiDate, chartStatus, chartFinanceiro });
-    setIsSyncing(false); // Desliga aviso de carregamento
+    setIsSyncing(false);
     setActiveTab('dashboard');
   };
 
@@ -227,7 +223,7 @@ export default function App() {
   );
 
   return (
-    <div className="flex h-screen bg-[#f3f4f6] font-sans text-gray-800 overflow-hidden">
+    <div className="flex h-screen w-full bg-[#f3f4f6] font-sans text-gray-800 overflow-hidden">
       
       {/* SIDEBAR */}
       <div className="w-20 md:w-64 bg-[#1a1a1a] flex flex-col shadow-2xl z-20 flex-shrink-0">
@@ -262,7 +258,7 @@ export default function App() {
             </header>
             
             {!resultados ? (
-              <div className="flex flex-col items-center justify-center bg-white p-16 rounded-3xl shadow-sm border border-gray-100 mt-10">
+              <div className="flex flex-col items-center justify-center bg-white p-16 rounded-3xl shadow-sm border border-gray-100 mt-10 w-full">
                 <FileSpreadsheet size={64} className="text-gray-300 mb-6" />
                 <h3 className="text-xl font-bold text-gray-600">Nenhum dado processado</h3>
                 <button onClick={() => setActiveTab('upload')} className="mt-8 bg-[#1a1a1a] text-white px-8 py-3 rounded-full font-bold hover:bg-gray-800 transition-colors">Iniciar Auditoria</button>
@@ -355,7 +351,7 @@ export default function App() {
 
         {/* TAB 2: UPLOAD */}
         {activeTab === 'upload' && (
-          <div className="w-full mx-auto animate-fade-in">
+          <div className="w-full animate-fade-in">
             <header className="mb-10 text-center md:text-left">
               <h2 className="text-3xl md:text-4xl font-black text-gray-900 tracking-tight">Nova Auditoria</h2>
               <p className="text-gray-500 mt-2">Faça o upload dos arquivos e nós enviaremos tudo em segurança para a nuvem.</p>
@@ -396,7 +392,6 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 3 E 4: MANTIDAS IGUAIS (SÓ EXIBINDO DADOS) */}
         {/* TAB 3: AGUARDANDO VENCIMENTO */}
         {activeTab === 'aguardando' && (
           <div className="w-full animate-fade-in">
@@ -412,7 +407,7 @@ export default function App() {
                 </div>
               )}
             </div>
-            {!resultados ? ( <div className="bg-white rounded-3xl shadow-sm p-12 text-center border border-gray-100 text-gray-500">Nenhum dado disponível.</div> ) : (
+            {!resultados ? ( <div className="bg-white rounded-3xl shadow-sm p-12 text-center border border-gray-100 text-gray-500 w-full">Nenhum dado disponível.</div> ) : (
               <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden w-full">
                 <div className="max-h-[70vh] overflow-y-auto">
                   <table className="w-full text-left border-collapse">
@@ -444,7 +439,7 @@ export default function App() {
               <h2 className="text-3xl md:text-4xl font-black text-gray-900 tracking-tight">Fila de Cobrança</h2>
               <p className="text-gray-500 mt-1">Dossiês prontos para exportar e abrir chamado.</p>
             </header>
-            {!resultados ? ( <div className="bg-white rounded-3xl shadow-sm p-12 text-center border border-gray-100 text-gray-500">Nenhum dado processado.</div> ) : (
+            {!resultados ? ( <div className="bg-white rounded-3xl shadow-sm p-12 text-center border border-gray-100 text-gray-500 w-full">Nenhum dado processado.</div> ) : (
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 w-full">
                 <div className="bg-white border border-gray-100 rounded-3xl shadow-sm flex flex-col h-[75vh] overflow-hidden w-full">
                   <div className="bg-orange-50 p-4 lg:p-6 border-b border-orange-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
