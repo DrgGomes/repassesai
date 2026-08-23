@@ -80,7 +80,7 @@ export default function Dashboard({ session }: any) {
         totalRetido: Number(totalRetido.toFixed(2)), 
         custoTotal: Number(custoTotal.toFixed(2)),
         lucroLiquido: Number(lucroLiquido.toFixed(2)),
-        jsonAudit: null, // No reload do F5 o JSON completo se perde, fica disponivel só ao processar a planilha
+        jsonAudit: null, 
         chartStatus: [
           {name:'Liquidados OK',value:corretos.length},
           {name:'No Pipeline',value:noPrazo.length},
@@ -129,9 +129,13 @@ export default function Dashboard({ session }: any) {
     reader.readAsArrayBuffer(file);
   };
 
+  // CORREÇÃO DO ERRO DE BUILD DA VERCEL
   const exportarExcel = (dados: any[], nomeArquivo: string) => {
     if (!dados || dados.length === 0) return alert("Não há dados.");
-    XLSX.writeFile(XLSX.utils.book_append_sheet(XLSX.utils.book_new(), XLSX.utils.json_to_sheet(dados), "Auditoria"), `${nomeArquivo}.xlsx`);
+    const worksheet = XLSX.utils.json_to_sheet(dados);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Auditoria");
+    XLSX.writeFile(workbook, `${nomeArquivo}.xlsx`);
   };
 
   const exportarPDF = (dados: any[], titulo: string, nomeArquivo: string) => {
@@ -164,7 +168,7 @@ export default function Dashboard({ session }: any) {
     if (upsellerData.length === 0 && kwaiData.length === 0) return alert("⚠️ Suba os arquivos.");
     setIsSyncing(true);
 
-    const tol = 0.01; // Tolerância estrita configurável de 1 centavo
+    const tol = 0.01; 
     const produtosExtraidos = new Map();
     upsellerData.forEach(row => {
       const sku = extrair(row, ['sku', 'especificação', 'código']);
@@ -197,7 +201,6 @@ export default function Dashboard({ session }: any) {
       if (!idPedido) return;
       
       const statusPos = extrair(row, ['pós-venda', 'cancelado', 'devolvido', 'status']);
-      // CAMPO OBRIGATÓRIO DA ESPECIFICAÇÃO: "Valor Total de Produtos"
       const valorTotalProdutos = Number(extrair(row, ['valor total de produtos'])) || Number(extrair(row, ['valor do pedido'])) || 0; 
       
       const dEnvio = new Date(String(extrair(row, ['hora de envio', 'hora do pedido'])).replace(' ', 'T') || 0);
@@ -249,16 +252,14 @@ export default function Dashboard({ session }: any) {
           return;
        }
 
-       // CAPTAÇÃO DE CAMPOS (Regras Estritas)
        const precoKwai = Number(extrair(kwaiRow, ['preço do produto', 'preço'])) || 0;
-       const subvencaoComercial = Number(extrair(kwaiRow, ['subvenção ao comércio de mercadorias'])) || 0; // Desconto do vendedor
+       const subvencaoComercial = Number(extrair(kwaiRow, ['subvenção ao comércio de mercadorias'])) || 0; 
        const subsidioPlataforma = Number(extrair(kwaiRow, ['subsídio da plataforma', 'subsídio de produto da plataforma'])) || 0;
        const freteCobradoVendedor = Number(extrair(kwaiRow, ['frete pago pelo vendedor'])) || 0;
        const recKwai = Number(extrair(kwaiRow, ['receita', 'repasse'])) || 0;
 
        auditObj.kwai = { preco: precoKwai, subvencao_comercio: subvencaoComercial, subsidio_plataforma: subsidioPlataforma, frete_vendedor: freteCobradoVendedor, receita: recKwai };
 
-       // INTEGRITY CHECK (Divergência de Preço)
        if (Math.abs(order.valor_bruto - precoKwai) > tol && order.valor_bruto > 0) {
            order.status = 'DIVERGENCIA_PRECO'; auditObj.classificacao.status = 'DIVERGENCIA_PRECO';
            divergenciasPreco.push({ "ID": order.id_pedido, "Preço UPSeller": order.valor_bruto, "Preço Kwai": precoKwai, "Gap": Math.abs(order.valor_bruto - precoKwai) });
@@ -266,7 +267,6 @@ export default function Dashboard({ session }: any) {
            return; 
        }
 
-       // MATEMÁTICA REAL
        const valorRealVenda = precoKwai - Math.abs(subvencaoComercial);
        const taxa20 = valorRealVenda * 0.20;
        const taxaOp = order.qtd * 4.00;
@@ -275,7 +275,6 @@ export default function Dashboard({ session }: any) {
 
        auditObj.calculo = { preco_real_venda: Number(valorRealVenda.toFixed(2)), comissao_20: Number(taxa20.toFixed(2)), taxa_operacional: Number(taxaOp.toFixed(2)), repasse_esperado: Number(repasseEsperado.toFixed(2)), diferenca: Number(diferenca.toFixed(2)) };
 
-       // CLASSIFICAÇÃO DE AMOSTRAS
        if (valorRealVenda <= 1.00 && order.status !== 'AMOSTRA_CONFIRMADA') {
            order.status = 'POSSIVEL_AMOSTRA'; auditObj.classificacao.status = 'POSSIVEL_AMOSTRA';
            amostras.push({ "ID do Pedido": order.id_pedido, "Valor Real": valorRealVenda, "Status": "POSSIVEL_AMOSTRA" });
@@ -290,7 +289,6 @@ export default function Dashboard({ session }: any) {
            return;
        }
 
-       // ATRIBUIÇÃO FINANCEIRA
        order.valor_bruto = valorRealVenda;
        order.receita_kwai = recKwai;
        order.lucro_pedido = recKwai - order.custo_pedido;
@@ -316,7 +314,6 @@ export default function Dashboard({ session }: any) {
           order.status = 'PAGO_CORRETO'; auditObj.classificacao.status = 'REPASSADO_CORRETAMENTE';
           corretos.push({ ...baseReport, "STATUS": "🟢 CORRETO" });
        } else if (diferenca < -tol) {
-          // Receita é MAIOR que o repasse esperado (diferença negativa)
           order.status = 'ACIMA_ESPERADO'; auditObj.classificacao.status = 'RECEBIMENTO_ACIMA_ESPERADO';
           corretos.push({ ...baseReport, "STATUS": "🟢 ACIMA DO ESPERADO" });
        } else {
@@ -485,7 +482,6 @@ export default function Dashboard({ session }: any) {
           </div>
         )}
 
-        {/* NOVA ABA: AMOSTRAS E DIVERGÊNCIA DE PREÇO */}
         {activeTab === 'amostras' && (
           <div className="w-full animate-fade-in max-w-5xl mx-auto pb-10">
             <SecaoHeader titulo="Amostras & Anomalias Base" descricao="Pedidos processados com Valor Real de Venda <= R$ 1,00 ou com divergência entre preço declarado e preço liquidado." />
@@ -543,7 +539,7 @@ export default function Dashboard({ session }: any) {
           </div>
         )}
 
-        {/* DEMAIS ABAS IGUAIS, MANTIDAS COMPACTAS... */}
+        {/* DEMAIS ABAS IGUAIS... */}
         {activeTab === 'aguardando' && (
           <div className="w-full animate-fade-in max-w-5xl mx-auto pb-10">
             <SecaoHeader titulo="Pipeline Logístico (No Prazo)" descricao="Pedidos que constam na base logística, mas ainda estão dentro da janela de liquidação padrão da plataforma." />
