@@ -7,7 +7,7 @@ import {
   PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, Legend 
 } from 'recharts';
 import { 
-  UploadCloud, Hourglass, Download, FileSpreadsheet, AlertTriangle, Loader2, Database, LogOut, FileJson, Package, Save, Trash2, Archive, CheckCircle2, ShieldCheck, Check, ChevronDown, Smartphone, ShoppingBag, Video, Store
+  LayoutDashboard, UploadCloud, Hourglass, Download, FileSpreadsheet, AlertTriangle, Loader2, Database, LogOut, FileJson, Ban, Package, LineChart, Save, Trash2, Archive, CheckCircle2, Search, ShieldCheck, Check, ChevronDown, Smartphone, ShoppingBag, Video, Store
 } from 'lucide-react';
 
 export default function Dashboard({ session }: any) {
@@ -23,7 +23,8 @@ export default function Dashboard({ session }: any) {
   
   const [meusProdutos, setMeusProdutos] = useState<any[]>([]);
 
-  const COLORS = ['#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6', '#64748b'];
+  // Paleta de Gráficos
+  const COLORS = ['#10b981', '#F1C40F', '#e74c3c', '#3b82f6', '#8b5cf6', '#94a3b8'];
 
   useEffect(() => {
     const carregarTudo = async () => {
@@ -87,11 +88,11 @@ export default function Dashboard({ session }: any) {
         jsonAudit: null, 
         chartStatus: [
           {name:'Liquidados OK',value:corretos.length},
-          {name:'No Pipeline',value:noPrazo.length},
+          {name:'No Prazo',value:noPrazo.length},
           {name:'Divergência',value:divergencias.length},
-          {name:'Atrasados SLA',value:atrasados.length},
+          {name:'Atrasados',value:atrasados.length},
           {name:'Amostras',value:amostras.length},
-          {name:'Quarentena',value:cancelados.length}
+          {name:'Cancelados',value:cancelados.length}
         ].filter(i=>i.value>0) 
     });
   };
@@ -110,11 +111,11 @@ export default function Dashboard({ session }: any) {
     const worksheet = XLSX.utils.json_to_sheet(dbOrders);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Backup_Completo");
-    XLSX.writeFile(workbook, `Database_Dump_${new Date().toLocaleDateString().replace(/\//g, '-')}.xlsx`);
+    XLSX.writeFile(workbook, `Backup_RepasseAI_${new Date().toLocaleDateString().replace(/\//g, '-')}.xlsx`);
   };
 
   const apagarTudo = async () => {
-    if (!window.confirm("Atenção: Limpeza completa da instância Kwai. Os registros de auditoria serão apagados. Confirmar?")) return;
+    if (!window.confirm("Atenção: Limpeza completa da instância. Os registros de auditoria serão apagados, mas seus produtos serão mantidos. Confirmar?")) return;
     setIsF5Loading(true);
     await supabase.from('pedidos_kwai').delete().eq('user_id', session.user.id);
     setResultados(null);
@@ -144,14 +145,14 @@ export default function Dashboard({ session }: any) {
   const exportarPDF = (dados: any[], titulo: string, nomeArquivo: string) => {
     if (!dados || dados.length === 0) return;
     const doc = new jsPDF('landscape'); 
-    doc.setFontSize(14); doc.text(`REPASSE.AI | ${titulo}`, 14, 15);
-    doc.setFontSize(9); doc.text(`Timestamp: ${new Date().toLocaleString()}`, 14, 22);
-    autoTable(doc, { head: [Object.keys(dados[0])], body: dados.map(obj => Object.values(obj)), startY: 28, styles: { fontSize: 8, font: 'helvetica' }, headStyles: { fillColor: [9, 9, 11] } });
+    doc.setFontSize(16); doc.text(`REPASSE.AI | ${titulo}`, 14, 15);
+    doc.setFontSize(10); doc.text(`Documento de Auditoria - Gerado em: ${new Date().toLocaleString()}`, 14, 22);
+    autoTable(doc, { head: [Object.keys(dados[0])], body: dados.map(obj => Object.values(obj)), startY: 28, styles: { fontSize: 8, font: 'helvetica' }, headStyles: { fillColor: [26, 26, 26] } });
     doc.save(`${nomeArquivo}.pdf`);
   };
 
   const exportarJSON = () => {
-    if (!resultados || !resultados.jsonAudit) return alert("Suba e processe os relatórios novamente para gerar o JSON profundo.");
+    if (!resultados || !resultados.jsonAudit) return alert("Por favor, processe os relatórios novamente nesta sessão para gerar o arquivo de auditoria profunda.");
     const blob = new Blob([JSON.stringify(resultados.jsonAudit, null, 2)], { type: 'application/json' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `Prova_Real_Auditoria_${new Date().getTime()}.json`; a.click();
   };
@@ -198,7 +199,6 @@ export default function Dashboard({ session }: any) {
     });
     if (maxKwaiDate.getTime() === 0) maxKwaiDate = new Date(); 
 
-    // CAMADA 1: LOGÍSTICA
     upsellerData.forEach(row => {
       const idPedido = String(extrair(row, ['nº de pedido da plataforma', 'nº de pedido', 'order id']) || '').trim();
       if (!idPedido) return;
@@ -224,7 +224,6 @@ export default function Dashboard({ session }: any) {
     let valorBrutoGeral = 0, totalDiferencas = 0, custoTotalGeral = 0, lucroLiquidoGeral = 0;
     const jsonAuditExport: any[] = [];
 
-    // CAMADAS 2 AO 8: AUDITORIA FORENSE FINANCEIRA (KWAI)
     Array.from(orderMap.values()).forEach(order => {
        const kwaiRow = kwaiData.find(r => String(extrair(r, ['número do pedido', 'pedido', 'id'])).trim() === order.id_pedido);
        
@@ -342,11 +341,11 @@ export default function Dashboard({ session }: any) {
         jsonAudit: jsonAuditExport,
         chartStatus: [
           {name:'Liquidados OK',value:corretos.length},
-          {name:'No Pipeline',value:noPrazo.length},
+          {name:'No Prazo',value:noPrazo.length},
           {name:'Divergência',value:divergencias.length},
-          {name:'Atrasados SLA',value:atrasados.length},
+          {name:'Atrasados',value:atrasados.length},
           {name:'Amostras',value:amostras.length},
-          {name:'Quarentena',value:cancelados.length}
+          {name:'Cancelados',value:cancelados.length}
         ].filter(i=>i.value>0) 
     });
     setIsSyncing(false);
@@ -362,91 +361,103 @@ export default function Dashboard({ session }: any) {
     setActiveTab(tab);
   };
 
-  if (isF5Loading) return <div className="h-screen w-full flex items-center justify-center bg-[#09090B]"><Loader2 className="animate-spin text-zinc-400" size={32} /></div>;
+  if (isF5Loading) return <div className="h-screen w-full flex items-center justify-center bg-[#f8fafc]"><Loader2 className="animate-spin text-[#F1C40F]" size={48} /></div>;
 
-  const SecaoHeader = ({ titulo, descricao }: any) => (
-    <div className="mb-8 border-b border-zinc-200 pb-5"><h2 className="text-2xl font-semibold tracking-tight text-zinc-900">{titulo}</h2><p className="text-sm text-zinc-500 mt-1">{descricao}</p></div>
+  // COMPONENTE HEADER DIDÁTICO E BONITO (COM GRADIENTE E EXPLICAÇÃO)
+  const SecaoHeader = ({ titulo, icone: Icon, descricao }: any) => (
+    <div className="bg-gradient-to-r from-gray-900 to-gray-800 rounded-3xl p-8 mb-8 text-white shadow-xl flex items-center gap-6 relative overflow-hidden">
+      <div className="absolute top-0 right-0 w-48 h-48 bg-[#F1C40F] opacity-10 rounded-full blur-3xl -mr-10 -mt-10"></div>
+      <div className="bg-gray-800/80 p-5 rounded-2xl border border-gray-700 shadow-inner">
+        <Icon size={36} className="text-[#F1C40F]" />
+      </div>
+      <div className="relative z-10">
+        <h2 className="text-3xl font-black tracking-tight">{titulo}</h2>
+        <p className="text-gray-300 font-medium text-sm mt-2 max-w-3xl leading-relaxed">{descricao}</p>
+      </div>
+    </div>
   );
 
   return (
-    <div className="flex h-screen w-full bg-[#FAFAFA] text-zinc-900 font-sans antialiased overflow-hidden selection:bg-emerald-100 selection:text-emerald-900">
+    <div className="flex h-screen w-full bg-[#f8fafc] text-gray-800 font-sans overflow-hidden selection:bg-[#F1C40F] selection:text-black">
       
-      {/* SIDEBAR MODULAR */}
-      <div className="w-72 bg-[#09090B] flex-shrink-0 flex flex-col justify-between overflow-y-auto border-r border-zinc-800 scrollbar-hide">
+      {/* SIDEBAR MODULAR (ESCURA COM TOQUE AMARELO) */}
+      <div className="w-72 bg-[#111827] flex-shrink-0 flex flex-col justify-between overflow-y-auto border-r border-gray-800 scrollbar-hide shadow-xl z-20 relative">
         <div className="p-5">
           <div className="flex items-center gap-3 mb-8 px-2 mt-2">
-            <div className="bg-zinc-50 p-1.5 rounded-md"><ShieldCheck size={18} className="text-zinc-900" /></div>
-            <h1 className="text-base font-bold text-zinc-50 tracking-tight">REPASSE.AI</h1>
+            <div className="bg-[#F1C40F] p-2 rounded-lg shadow-lg"><ShieldCheck size={24} className="text-[#111827]" /></div>
+            <h1 className="text-xl font-black text-white tracking-widest">REPASSE<span className="text-[#F1C40F]">.AI</span></h1>
           </div>
           
-          <p className="text-[10px] uppercase tracking-widest text-zinc-600 font-semibold mb-3 ml-2">Módulos de Auditoria</p>
+          <p className="text-[11px] uppercase tracking-widest text-gray-500 font-bold mb-3 ml-2">Módulos de Auditoria</p>
           <div className="space-y-2 mb-6">
             
-            {/* MENU KWAI (ATIVO) */}
-            <div className="bg-zinc-900/50 rounded-xl border border-zinc-800/50 overflow-hidden">
-              <button onClick={() => toggleMenu('kwai')} className="w-full flex items-center justify-between p-3 text-sm font-medium text-zinc-300 hover:text-zinc-50 transition-colors">
-                 <div className="flex items-center gap-3"><div className="bg-[#f59e0b]/10 p-1.5 rounded-md text-[#f59e0b]"><Smartphone size={16}/></div> Kwai </div>
-                 <ChevronDown size={14} className={`transition-transform text-zinc-500 ${openMenus['kwai'] ? 'rotate-180' : ''}`} />
+            {/* MENU KWAI */}
+            <div className="bg-gray-900/60 rounded-2xl border border-gray-800 overflow-hidden">
+              <button onClick={() => toggleMenu('kwai')} className="w-full flex items-center justify-between p-4 text-sm font-bold text-gray-300 hover:text-white transition-colors">
+                 <div className="flex items-center gap-3"><div className="bg-[#F1C40F]/10 p-2 rounded-lg text-[#F1C40F]"><Smartphone size={18}/></div> Kwai </div>
+                 <ChevronDown size={16} className={`transition-transform text-gray-500 ${openMenus['kwai'] ? 'rotate-180' : ''}`} />
               </button>
               {openMenus['kwai'] && (
-                <div className="pl-11 pr-3 pb-3 pt-1 space-y-1">
-                  <button onClick={() => handleMenuClick('kwai', 'dashboard')} className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors ${marketplace === 'kwai' && activeTab === 'dashboard' ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'}`}>Visão Geral</button>
-                  <button onClick={() => handleMenuClick('kwai', 'upload')} className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors ${marketplace === 'kwai' && activeTab === 'upload' ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'}`}>Nova Auditoria</button>
-                  <button onClick={() => handleMenuClick('kwai', 'aguardando')} className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors ${marketplace === 'kwai' && activeTab === 'aguardando' ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'}`}>No Pipeline (Prazo)</button>
-                  <button onClick={() => handleMenuClick('kwai', 'divergencias')} className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors ${marketplace === 'kwai' && activeTab === 'divergencias' ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'}`}>Divergências / Atrasos</button>
-                  <button onClick={() => handleMenuClick('kwai', 'amostras')} className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors ${marketplace === 'kwai' && activeTab === 'amostras' ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'}`}>Amostras & Anomalias</button>
-                  <button onClick={() => handleMenuClick('kwai', 'malhafina')} className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors ${marketplace === 'kwai' && activeTab === 'malhafina' ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'}`}>Quarentena (Canc.)</button>
-                  <button onClick={() => handleMenuClick('kwai', 'lucro')} className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors ${marketplace === 'kwai' && activeTab === 'lucro' ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50'}`}>Lucratividade</button>
+                <div className="pl-12 pr-4 pb-4 pt-1 space-y-1.5">
+                  <button onClick={() => handleMenuClick('kwai', 'dashboard')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${marketplace === 'kwai' && activeTab === 'dashboard' ? 'bg-[#F1C40F] text-[#111827] shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>Visão Geral</button>
+                  <button onClick={() => handleMenuClick('kwai', 'upload')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${marketplace === 'kwai' && activeTab === 'upload' ? 'bg-[#F1C40F] text-[#111827] shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>Nova Auditoria</button>
+                  <button onClick={() => handleMenuClick('kwai', 'aguardando')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${marketplace === 'kwai' && activeTab === 'aguardando' ? 'bg-[#F1C40F] text-[#111827] shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>No Prazo</button>
+                  <button onClick={() => handleMenuClick('kwai', 'divergencias')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${marketplace === 'kwai' && activeTab === 'divergencias' ? 'bg-[#F1C40F] text-[#111827] shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>Divergências</button>
+                  <button onClick={() => handleMenuClick('kwai', 'amostras')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${marketplace === 'kwai' && activeTab === 'amostras' ? 'bg-[#F1C40F] text-[#111827] shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>Amostras</button>
+                  <button onClick={() => handleMenuClick('kwai', 'malhafina')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${marketplace === 'kwai' && activeTab === 'malhafina' ? 'bg-[#F1C40F] text-[#111827] shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>Cancelados</button>
+                  <button onClick={() => handleMenuClick('kwai', 'lucro')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${marketplace === 'kwai' && activeTab === 'lucro' ? 'bg-[#F1C40F] text-[#111827] shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>DRE / Lucro</button>
                 </div>
               )}
             </div>
 
-            {/* MENUS EM DESENVOLVIMENTO (SHOPEE, TIKTOK, MERCADO LIVRE) */}
-            <div className="bg-transparent rounded-xl overflow-hidden">
-              <button onClick={() => toggleMenu('shopee')} className="w-full flex items-center justify-between p-3 text-sm font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/50 rounded-xl transition-colors">
-                 <div className="flex items-center gap-3"><div className="bg-[#ee4d2d]/10 p-1.5 rounded-md text-[#ee4d2d]"><ShoppingBag size={16}/></div> Shopee </div>
-                 <ChevronDown size={14} className={`transition-transform text-zinc-600 ${openMenus['shopee'] ? 'rotate-180' : ''}`} />
+            {/* SHOPEE, TIKTOK, MELI */}
+            <div className="bg-transparent rounded-2xl overflow-hidden">
+              <button onClick={() => toggleMenu('shopee')} className="w-full flex items-center justify-between p-4 text-sm font-bold text-gray-400 hover:text-white hover:bg-gray-900/50 rounded-2xl transition-colors">
+                 <div className="flex items-center gap-3"><div className="bg-[#ee4d2d]/10 p-2 rounded-lg text-[#ee4d2d]"><ShoppingBag size={18}/></div> Shopee </div>
+                 <ChevronDown size={16} className={`transition-transform text-gray-600 ${openMenus['shopee'] ? 'rotate-180' : ''}`} />
               </button>
               {openMenus['shopee'] && (
-                <div className="pl-11 pr-3 pb-2 pt-1 space-y-1">
-                  {['Visão Geral', 'Nova Auditoria', 'No Pipeline', 'Divergências', 'Quarentena'].map(t => ( <button key={t} onClick={() => handleMenuClick('shopee', 'upload')} className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors ${marketplace === 'shopee' ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-500 hover:text-zinc-300'}`}>{t}</button> ))}
+                <div className="pl-12 pr-4 pb-2 pt-1 space-y-1">
+                  {['Visão Geral', 'Nova Auditoria', 'Divergências'].map(t => ( <button key={t} onClick={() => handleMenuClick('shopee', 'upload')} className="w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold text-gray-500 hover:text-gray-300">{t}</button> ))}
                 </div>
               )}
             </div>
 
-            <div className="bg-transparent rounded-xl overflow-hidden">
-              <button onClick={() => toggleMenu('tiktok')} className="w-full flex items-center justify-between p-3 text-sm font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/50 rounded-xl transition-colors">
-                 <div className="flex items-center gap-3"><div className="bg-[#ec4899]/10 p-1.5 rounded-md text-[#ec4899]"><Video size={16}/></div> TikTok </div>
-                 <ChevronDown size={14} className={`transition-transform text-zinc-600 ${openMenus['tiktok'] ? 'rotate-180' : ''}`} />
+            <div className="bg-transparent rounded-2xl overflow-hidden">
+              <button onClick={() => toggleMenu('tiktok')} className="w-full flex items-center justify-between p-4 text-sm font-bold text-gray-400 hover:text-white hover:bg-gray-900/50 rounded-2xl transition-colors">
+                 <div className="flex items-center gap-3"><div className="bg-[#ec4899]/10 p-2 rounded-lg text-[#ec4899]"><Video size={18}/></div> TikTok </div>
+                 <ChevronDown size={16} className={`transition-transform text-gray-600 ${openMenus['tiktok'] ? 'rotate-180' : ''}`} />
               </button>
               {openMenus['tiktok'] && (
-                <div className="pl-11 pr-3 pb-2 pt-1 space-y-1">
-                  {['Visão Geral', 'Nova Auditoria', 'No Pipeline', 'Divergências', 'Quarentena'].map(t => ( <button key={t} onClick={() => handleMenuClick('tiktok', 'upload')} className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors ${marketplace === 'tiktok' ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-500 hover:text-zinc-300'}`}>{t}</button> ))}
+                <div className="pl-12 pr-4 pb-2 pt-1 space-y-1">
+                  {['Visão Geral', 'Nova Auditoria', 'Divergências'].map(t => ( <button key={t} onClick={() => handleMenuClick('tiktok', 'upload')} className="w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold text-gray-500 hover:text-gray-300">{t}</button> ))}
                 </div>
               )}
             </div>
 
-            <div className="bg-transparent rounded-xl overflow-hidden">
-              <button onClick={() => toggleMenu('meli')} className="w-full flex items-center justify-between p-3 text-sm font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/50 rounded-xl transition-colors">
-                 <div className="flex items-center gap-3"><div className="bg-[#eab308]/10 p-1.5 rounded-md text-[#eab308]"><Store size={16}/></div> Mercado Livre </div>
-                 <ChevronDown size={14} className={`transition-transform text-zinc-600 ${openMenus['meli'] ? 'rotate-180' : ''}`} />
+            <div className="bg-transparent rounded-2xl overflow-hidden">
+              <button onClick={() => toggleMenu('meli')} className="w-full flex items-center justify-between p-4 text-sm font-bold text-gray-400 hover:text-white hover:bg-gray-900/50 rounded-2xl transition-colors">
+                 <div className="flex items-center gap-3"><div className="bg-[#eab308]/10 p-2 rounded-lg text-[#eab308]"><Store size={18}/></div> Mercado Livre </div>
+                 <ChevronDown size={16} className={`transition-transform text-gray-600 ${openMenus['meli'] ? 'rotate-180' : ''}`} />
               </button>
               {openMenus['meli'] && (
-                <div className="pl-11 pr-3 pb-2 pt-1 space-y-1">
-                  {['Visão Geral', 'Nova Auditoria', 'No Pipeline', 'Divergências', 'Quarentena'].map(t => ( <button key={t} onClick={() => handleMenuClick('meli', 'upload')} className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors ${marketplace === 'meli' ? 'bg-zinc-800 text-zinc-50' : 'text-zinc-500 hover:text-zinc-300'}`}>{t}</button> ))}
+                <div className="pl-12 pr-4 pb-2 pt-1 space-y-1">
+                  {['Visão Geral', 'Nova Auditoria', 'Divergências'].map(t => ( <button key={t} onClick={() => handleMenuClick('meli', 'upload')} className="w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold text-gray-500 hover:text-gray-300">{t}</button> ))}
                 </div>
               )}
             </div>
 
           </div>
 
-          <div className="h-px bg-zinc-800 my-4 mx-2"></div>
-          <p className="text-[10px] uppercase tracking-widest text-zinc-600 font-semibold mb-2 ml-3">Gestão Global</p>
-          <nav className="space-y-1">
-            <button onClick={() => { setMarketplace('global'); setActiveTab('produtos'); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${activeTab === 'produtos' ? 'bg-emerald-500/10 text-emerald-400' : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/40'}`}><Package size={16}/> Meus Produtos (SKUs)</button>
+          <div className="h-px bg-gray-800 my-6 mx-2"></div>
+          <p className="text-[11px] uppercase tracking-widest text-gray-500 font-bold mb-3 ml-2">Gestão Global</p>
+          <nav className="space-y-2">
+            <button onClick={() => { setMarketplace('global'); setActiveTab('produtos'); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold transition-all ${activeTab === 'produtos' ? 'bg-[#10b981] text-white shadow-lg' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}><Package size={18}/> Meus Produtos (SKUs)</button>
           </nav>
         </div>
-        <div className="p-4 border-t border-zinc-800"><button onClick={() => supabase.auth.signOut()} className="w-full flex items-center gap-3 px-3 py-2.5 text-zinc-500 hover:text-red-400 rounded-lg transition-colors text-sm font-medium"><LogOut size={16}/> Encerrar Sessão</button></div>
+        <div className="p-5 border-t border-gray-800">
+          <button onClick={() => supabase.auth.signOut()} className="w-full flex items-center justify-center gap-3 px-4 py-3 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-2xl transition-colors text-sm font-bold"><LogOut size={18}/> Encerrar Sessão</button>
+        </div>
       </div>
 
       <div className="flex-1 h-full overflow-y-auto p-10 relative">
@@ -454,19 +465,26 @@ export default function Dashboard({ session }: any) {
         {/* VIEW GLOBAL: PRODUTOS */}
         {activeTab === 'produtos' && (
           <div className="w-full animate-fade-in max-w-6xl mx-auto pb-10">
-            <div className="flex justify-between items-end mb-8 border-b border-zinc-200 pb-5"><div><h2 className="text-2xl font-semibold tracking-tight text-zinc-900">Gerenciamento Central de SKUs</h2><p className="text-sm text-zinc-500 mt-1">Atribuição de custos (COGS) válida para todas as plataformas integradas.</p></div><button onClick={carregarProdutos} className="bg-white text-zinc-700 border border-zinc-200 px-4 py-2 rounded-md font-medium text-xs hover:bg-zinc-50 shadow-sm transition-colors">Sync Database</button></div>
-            <div className="bg-white border border-zinc-200 rounded-xl shadow-sm overflow-hidden">
-               {meusProdutos.length === 0 ? ( <div className="p-16 text-center text-sm text-zinc-500">Catálogo vazio. O sistema populará isso automaticamente via Data Ingestion.</div> ) : (
+            <SecaoHeader titulo="Gerenciamento Central de SKUs" icone={Package} descricao="Cadastre os custos de fabricação ou aquisição para descobrir sua lucratividade real. Esta tabela serve como base de custo (COGS) para todas as plataformas de vendas conectadas." />
+            
+            <div className="bg-white border border-gray-100 rounded-3xl shadow-sm overflow-hidden">
+               <div className="p-4 border-b border-gray-100 bg-gray-50 flex justify-end">
+                 <button onClick={carregarProdutos} className="bg-white text-gray-700 border border-gray-200 px-5 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-gray-100 transition-colors shadow-sm">Sincronizar Banco</button>
+               </div>
+               {meusProdutos.length === 0 ? ( <div className="p-16 text-center text-gray-400 font-bold text-lg">Catálogo vazio. Suba uma planilha na aba "Nova Auditoria" para extrair os SKUs.</div> ) : (
                  <div className="max-h-[60vh] overflow-y-auto">
                    <table className="w-full text-left text-sm">
-                     <thead className="bg-zinc-50/50 text-zinc-500 font-medium sticky top-0 border-b border-zinc-200"><tr><th className="p-4">SKU / Identifier</th><th className="p-4 w-1/3">Item Descriptor</th><th className="p-4">Unit Cost (COGS)</th><th className="p-4">SKU Consolidation</th><th className="p-4">Ação</th></tr></thead>
-                     <tbody className="divide-y divide-zinc-100">
+                     <thead className="bg-gray-50 text-gray-500 font-bold uppercase text-[11px] tracking-wider sticky top-0 border-b border-gray-100">
+                       <tr><th className="p-5">Cód. SKU</th><th className="p-5 w-1/3">Descrição do Produto</th><th className="p-5">Custo (R$)</th><th className="p-5">Agrupar Vendas c/ SKU</th><th className="p-5">Ação</th></tr>
+                     </thead>
+                     <tbody className="divide-y divide-gray-100">
                        {meusProdutos.map((prod) => (
-                         <tr key={prod.id} className="hover:bg-zinc-50 transition-colors">
-                           <td className="p-4 font-mono text-xs text-zinc-500">{prod.sku}</td><td className="p-4 text-zinc-900 truncate max-w-xs" title={prod.nome}>{prod.nome}</td>
-                           <td className="p-4"><div className="relative"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 text-xs font-medium">R$</span><input type="number" step="0.01" defaultValue={prod.custo} id={`custo-${prod.sku}`} className="w-28 bg-white border border-zinc-200 rounded-md py-1.5 pl-8 pr-2 text-sm text-zinc-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all shadow-sm" /></div></td>
-                           <td className="p-4"><input type="text" placeholder="SKU-PARENT" defaultValue={prod.sku_master || ''} id={`master-${prod.sku}`} className="w-32 bg-white border border-zinc-200 rounded-md px-3 py-1.5 text-xs text-zinc-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all shadow-sm font-mono placeholder:text-zinc-300" /></td>
-                           <td className="p-4"><button onClick={() => { const custo = (document.getElementById(`custo-${prod.sku}`) as HTMLInputElement).value; const master = (document.getElementById(`master-${prod.sku}`) as HTMLInputElement).value; atualizarProduto(prod.sku, Number(custo), master); }} className="bg-zinc-900 text-white p-1.5 rounded-md hover:bg-zinc-800 transition-all shadow-sm"><Save size={16}/></button></td>
+                         <tr key={prod.id} className="hover:bg-gray-50 transition-colors">
+                           <td className="p-5 font-mono text-xs font-bold text-gray-600 bg-gray-50/50">{prod.sku}</td>
+                           <td className="p-5 text-gray-800 truncate max-w-xs font-semibold" title={prod.nome}>{prod.nome}</td>
+                           <td className="p-5"><div className="relative"><span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">R$</span><input type="number" step="0.01" defaultValue={prod.custo} id={`custo-${prod.sku}`} className="w-32 bg-white border-2 border-gray-200 rounded-xl py-2.5 pl-10 pr-3 text-sm text-gray-900 focus:border-[#10b981] outline-none transition-all font-bold" /></div></td>
+                           <td className="p-5"><input type="text" placeholder="SKU Principal" defaultValue={prod.sku_master || ''} id={`master-${prod.sku}`} className="w-40 bg-white border-2 border-gray-200 rounded-xl px-4 py-2.5 text-xs text-gray-900 focus:border-[#10b981] outline-none transition-all font-mono font-bold" /></td>
+                           <td className="p-5"><button onClick={() => { const custo = (document.getElementById(`custo-${prod.sku}`) as HTMLInputElement).value; const master = (document.getElementById(`master-${prod.sku}`) as HTMLInputElement).value; atualizarProduto(prod.sku, Number(custo), master); }} className="bg-[#10b981] text-white p-2.5 rounded-xl hover:bg-emerald-600 hover:shadow-lg hover:-translate-y-1 transition-all"><Save size={18}/></button></td>
                          </tr>
                        ))}
                      </tbody>
@@ -480,13 +498,13 @@ export default function Dashboard({ session }: any) {
         {/* VIEW: MÓDULOS EM DESENVOLVIMENTO (SHOPEE, TIKTOK, MELI) */}
         {activeTab !== 'produtos' && marketplace !== 'kwai' && (
            <div className="flex flex-col items-center justify-center min-h-[70vh] text-center animate-fade-in">
-             <div className="bg-white border border-zinc-200 p-6 rounded-2xl shadow-sm mb-6">
-                {marketplace === 'shopee' && <ShoppingBag size={48} className="text-zinc-300" />}
-                {marketplace === 'tiktok' && <Video size={48} className="text-zinc-300" />}
-                {marketplace === 'meli' && <Store size={48} className="text-zinc-300" />}
+             <div className="bg-white border border-gray-200 p-8 rounded-full shadow-lg mb-8">
+                {marketplace === 'shopee' && <ShoppingBag size={56} className="text-[#ee4d2d]" />}
+                {marketplace === 'tiktok' && <Video size={56} className="text-[#ec4899]" />}
+                {marketplace === 'meli' && <Store size={56} className="text-[#eab308]" />}
              </div>
-             <h2 className="text-2xl font-semibold text-zinc-900 tracking-tight">Módulo em Desenvolvimento</h2>
-             <p className="text-zinc-500 mt-2 max-w-md leading-relaxed">Nossos engenheiros financeiros estão homologando as regras matemáticas e as tolerâncias de frete para a plataforma <b>{marketplace.toUpperCase()}</b>. Estará disponível em breve.</p>
+             <h2 className="text-3xl font-black text-gray-900 tracking-tight">Módulo em Desenvolvimento</h2>
+             <p className="text-gray-500 mt-4 max-w-lg leading-relaxed text-lg font-medium">Nossos engenheiros estão homologando as regras matemáticas exclusivas e as tolerâncias de frete para a plataforma <b>{marketplace.toUpperCase()}</b>. Estará disponível em breve.</p>
            </div>
         )}
 
@@ -495,100 +513,161 @@ export default function Dashboard({ session }: any) {
           <>
             {activeTab === 'dashboard' && resultados && (
               <div className="w-full animate-fade-in max-w-6xl mx-auto pb-10">
-                <div className="flex justify-between items-end mb-8 border-b border-zinc-200 pb-5">
-                  <div><h2 className="text-2xl font-semibold tracking-tight text-zinc-900">Visão Geral - Kwai</h2><p className="text-sm text-zinc-500 mt-1">Métricas de volume e capital processadas em base forense.</p></div>
-                  <div className="flex gap-2">
-                    <button onClick={exportarJSON} className="flex items-center gap-2 text-xs font-medium text-zinc-600 bg-white hover:bg-zinc-50 border border-zinc-200 px-3 py-2 rounded-lg transition-colors shadow-sm"><FileJson size={14}/> Dados Raw (JSON)</button>
-                    <button onClick={exportarBackupGeral} className="flex items-center gap-2 text-xs font-medium text-zinc-600 bg-white hover:bg-zinc-50 border border-zinc-200 px-3 py-2 rounded-lg transition-colors shadow-sm"><Archive size={14}/> Database Dump</button>
-                    <button onClick={apagarTudo} className="flex items-center gap-2 text-xs font-medium text-red-600 bg-white hover:bg-red-50 border border-red-100 px-3 py-2 rounded-lg transition-colors shadow-sm"><Trash2 size={14}/></button>
-                  </div>
+                <SecaoHeader titulo="Visão Geral Operacional" icone={LayoutDashboard} descricao="O raio-x completo do seu negócio na plataforma Kwai. Acompanhe o volume real de vendas e identifique imediatamente o capital retido por divergências." />
+                
+                <div className="flex justify-end gap-3 mb-6">
+                    <button onClick={exportarJSON} className="flex items-center gap-2 text-sm font-bold text-gray-600 bg-white hover:bg-gray-50 border border-gray-200 px-5 py-2.5 rounded-xl transition-colors shadow-sm"><FileJson size={16}/> Dados para I.A (JSON)</button>
+                    <button onClick={exportarBackupGeral} className="flex items-center gap-2 text-sm font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-100 px-5 py-2.5 rounded-xl transition-colors shadow-sm"><Archive size={16}/> Baixar Base</button>
+                    <button onClick={apagarTudo} className="flex items-center gap-2 text-sm font-bold text-red-600 bg-red-50 hover:bg-red-100 border border-red-100 px-5 py-2.5 rounded-xl transition-colors shadow-sm"><Trash2 size={16}/> Apagar Dados</button>
                 </div>
-                <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                  <div className="xl:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="bg-white p-6 rounded-xl border border-zinc-200 shadow-sm flex flex-col justify-center"><p className="text-xs font-medium text-zinc-500 uppercase tracking-widest mb-2 flex items-center gap-2"><CheckCircle2 size={14} className="text-emerald-500"/> Venda Efetiva Operacional</p><p className="text-4xl font-semibold tracking-tight text-zinc-900">R$ {resultados.valorBruto.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p></div>
-                    <div className="bg-white p-6 rounded-xl border border-red-200 shadow-sm flex flex-col justify-center relative overflow-hidden"><div className="absolute top-0 right-0 p-6 opacity-10"><AlertTriangle size={64} className="text-red-500"/></div><p className="text-xs font-medium text-red-600 uppercase tracking-widest mb-2 relative z-10">Divergências p/ Cobrança</p><p className="text-4xl font-semibold tracking-tight text-red-600 relative z-10">R$ {resultados.totalRetido.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p></div>
+
+                <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+                  <div className="xl:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm flex flex-col justify-center">
+                       <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3 flex items-center gap-2"><CheckCircle2 size={16} className="text-[#10b981]"/> Venda Real Processada</p>
+                       <p className="text-4xl font-black tracking-tight text-gray-900">R$ {resultados.valorBruto.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-red-50 to-white p-8 rounded-3xl border border-red-100 shadow-sm flex flex-col justify-center relative overflow-hidden">
+                       <div className="absolute top-0 right-0 p-6 opacity-10"><AlertTriangle size={80} className="text-red-500"/></div>
+                       <p className="text-xs font-bold text-red-600 uppercase tracking-widest mb-3 relative z-10">Divergências p/ Cobrar</p>
+                       <p className="text-4xl font-black tracking-tight text-red-600 relative z-10">R$ {resultados.totalRetido.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                    </div>
                   </div>
-                  <div className="bg-white p-6 rounded-xl border border-zinc-200 shadow-sm flex flex-col min-h-[300px]"><h3 className="text-xs font-medium text-zinc-500 uppercase tracking-widest mb-4">Status de Conformidade</h3><div className="flex-1 min-h-[200px]"><ResponsiveContainer width="100%" height="100%"><PieChart><Pie data={resultados.chartStatus} cx="50%" cy="50%" innerRadius="65%" outerRadius="85%" paddingAngle={2} dataKey="value" stroke="none">{resultados.chartStatus.map((_:any, index:number) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}</Pie><RechartsTooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e4e4e7', boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)' }}/><Legend verticalAlign="bottom" height={24} iconType="circle" wrapperStyle={{ fontSize: '11px' }}/></PieChart></ResponsiveContainer></div></div>
+                  <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm flex flex-col min-h-[350px]">
+                    <h3 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-6">Status da Liquidação</h3>
+                    <div className="flex-1 min-h-[220px]">
+                       <ResponsiveContainer width="100%" height="100%">
+                         <PieChart><Pie data={resultados.chartStatus} cx="50%" cy="50%" innerRadius="65%" outerRadius="85%" paddingAngle={3} dataKey="value" stroke="none">{resultados.chartStatus.map((_:any, index:number) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}</Pie><RechartsTooltip contentStyle={{ borderRadius: '16px', border: '1px solid #f3f4f6', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} itemStyle={{ fontWeight: 'bold' }}/><Legend verticalAlign="bottom" height={30} iconType="circle" wrapperStyle={{ fontSize: '13px', fontWeight: 'bold', color: '#4b5563' }}/></PieChart>
+                       </ResponsiveContainer>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
             
             {activeTab === 'dashboard' && !resultados && (
-              <div className="w-full animate-fade-in max-w-4xl mx-auto flex flex-col items-center justify-center min-h-[80vh]">
-                <div className="absolute top-6 right-6"><button onClick={apagarTudo} className="flex items-center gap-2 text-xs font-medium text-red-600 bg-white hover:bg-red-50 border border-red-100 px-3 py-2 rounded-lg transition-colors shadow-sm"><Trash2 size={14}/> Limpar Instância</button></div>
-                <div className="bg-white border border-zinc-200 p-4 rounded-2xl shadow-sm mb-8"><ShieldCheck size={32} className="text-zinc-900" /></div>
-                <h2 className="text-3xl font-semibold text-zinc-900 tracking-tight text-center mb-4">Auditoria Forense Nível 1</h2>
-                <p className="text-zinc-500 text-center max-w-xl mb-12 leading-relaxed">Compliance financeiro construído sobre as diretrizes estritas do mercado. O sistema isola subsídios de plataforma, cruza os valores base e expõe centavos omitidos em falsos positivos.</p>
-                <button onClick={() => setActiveTab('upload')} className="bg-zinc-900 text-white px-8 py-3 rounded-lg font-medium text-sm hover:bg-zinc-800 shadow-sm transition-colors flex items-center gap-2"><UploadCloud size={18}/> Iniciar Workspace (Kwai)</button>
+              <div className="w-full animate-fade-in max-w-5xl mx-auto flex flex-col items-center justify-center min-h-[80vh] relative">
+                <div className="absolute top-6 right-6">
+                   <button onClick={apagarTudo} className="flex items-center gap-2 text-sm font-bold text-red-600 bg-white border border-red-100 shadow-sm hover:bg-red-50 px-5 py-2.5 rounded-xl transition-colors"><Trash2 size={16}/> Limpar Instância</button>
+                </div>
+                
+                <div className="bg-[#F1C40F]/20 p-6 rounded-full shadow-lg mb-8">
+                  <ShieldCheck size={56} className="text-yellow-600" />
+                </div>
+                
+                <h2 className="text-4xl font-black text-gray-900 tracking-tight text-center mb-6">Auditoria Forense (Kwai)</h2>
+                <p className="text-gray-500 text-center max-w-2xl mb-12 text-lg font-medium leading-relaxed">
+                  Compliance financeiro focado em precisão absoluta. O sistema isola os subsídios dados pela plataforma, cruza os valores base do seu ERP e expõe os centavos omitidos em cobranças falsas.
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full mb-12">
+                  <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 hover:-translate-y-1 transition-transform">
+                    <Database size={28} className="text-blue-500 mb-5" />
+                    <h3 className="text-lg font-black text-gray-900 mb-2">1. Entrada de Dados</h3>
+                    <p className="text-sm text-gray-500 font-medium leading-relaxed">Cruzamento algorítmico do catálogo logístico (UPSeller) com o extrato consolidado de liquidação (Kwai).</p>
+                  </div>
+                  
+                  <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 hover:-translate-y-1 transition-transform relative overflow-hidden">
+                    <div className="absolute top-0 right-0 w-24 h-full bg-gradient-to-l from-green-50 to-transparent pointer-events-none rounded-r-3xl"></div>
+                    <Search size={28} className="text-green-500 mb-5 relative z-10" />
+                    <h3 className="text-lg font-black text-gray-900 mb-2 relative z-10">2. A Regra de Ouro</h3>
+                    <p className="text-sm text-gray-500 font-medium leading-relaxed relative z-10">Isola os descontos comerciais. A base de cálculo exata é: <span className="font-mono bg-gray-100 px-1 py-0.5 rounded text-gray-800 font-bold">(Preço - Subvenção) - 20% - R$4.</span></p>
+                  </div>
+
+                  <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 hover:-translate-y-1 transition-transform">
+                    <LineChart size={28} className="text-orange-500 mb-5" />
+                    <h3 className="text-lg font-black text-gray-900 mb-2">3. Business Intelligence</h3>
+                    <p className="text-sm text-gray-500 font-medium leading-relaxed">Geração automática de DRE, identificação de capital retido por divergências e controle de custos de SKU.</p>
+                  </div>
+                </div>
+
+                <button onClick={() => setActiveTab('upload')} className="bg-[#111827] text-[#F1C40F] px-10 py-5 rounded-2xl font-black text-lg hover:shadow-2xl hover:scale-105 transition-all flex items-center justify-center gap-3">
+                  <UploadCloud size={24}/> Iniciar Workspace de Auditoria
+                </button>
               </div>
             )}
 
             {activeTab === 'upload' && (
-              <div className="w-full animate-fade-in max-w-4xl mx-auto pb-10">
-                <SecaoHeader titulo="Data Ingestion (Kwai)" descricao="Upload dos artefatos contábeis exportados. Obrigatório: Arquivo UPSeller contendo 'Valor Total de Produtos'." />
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                  <label className="bg-white border border-dashed border-zinc-300 rounded-xl p-8 flex flex-col items-center justify-center cursor-pointer hover:border-zinc-400 hover:bg-zinc-50 transition-all"><div className="bg-zinc-100 p-3 rounded-lg mb-4 text-zinc-600"><Package size={24}/></div><h3 className="font-semibold text-sm text-zinc-900 mb-1">Base Logística (UPSeller)</h3><p className="text-xs text-zinc-500 mb-4 text-center h-8">{upsellerData.length > 0 ? <span className="inline-flex items-center px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 font-medium ring-1 ring-inset ring-emerald-600/20">{upsellerData.length} registros</span> : 'CSV / Excel'}</p><input type="file" className="hidden" onChange={(e) => lerPlanilha(e, setUpsellerData)} /></label>
-                  <label className="bg-white border border-dashed border-zinc-300 rounded-xl p-8 flex flex-col items-center justify-center cursor-pointer hover:border-zinc-400 hover:bg-zinc-50 transition-all"><div className="bg-zinc-100 p-3 rounded-lg mb-4 text-zinc-600"><FileSpreadsheet size={24}/></div><h3 className="font-semibold text-sm text-zinc-900 mb-1">Extrato Financeiro (Kwai)</h3><p className="text-xs text-zinc-500 mb-4 text-center h-8">{kwaiData.length > 0 ? <span className="inline-flex items-center px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 font-medium ring-1 ring-inset ring-emerald-600/20">{kwaiData.length} registros</span> : 'CSV / Excel'}</p><input type="file" className="hidden" onChange={(e) => lerPlanilha(e, setKwaiData)} /></label>
+              <div className="w-full animate-fade-in max-w-5xl mx-auto pb-10">
+                <SecaoHeader titulo="Processar Relatórios" icone={UploadCloud} descricao="Faça o upload dos arquivos originais em formato Excel (.xlsx ou .xls). Obrigatório: O arquivo da UPSeller deve conter a coluna 'Valor Total de Produtos'." />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                  <label className="bg-white border-2 border-dashed border-gray-300 rounded-3xl p-10 flex flex-col items-center justify-center cursor-pointer hover:border-[#F1C40F] hover:bg-yellow-50/30 transition-all">
+                    <div className="bg-gray-100 p-4 rounded-xl mb-5 text-gray-500"><Package size={32}/></div>
+                    <h3 className="font-black text-lg text-gray-900 mb-2">Base Logística (UPSeller)</h3>
+                    <p className="text-sm text-gray-500 mb-6 text-center font-medium h-8">{upsellerData.length > 0 ? <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-green-50 text-green-700 font-bold border border-green-200">{upsellerData.length} registros prontos</span> : 'Exportação geral de pedidos'}</p>
+                    <div className="text-sm font-bold text-gray-700 bg-white border-2 border-gray-200 px-6 py-2.5 rounded-xl shadow-sm hover:border-gray-300 transition-colors">Selecionar Arquivo</div>
+                    <input type="file" className="hidden" onChange={(e) => lerPlanilha(e, setUpsellerData)} />
+                  </label>
+
+                  <label className="bg-white border-2 border-dashed border-gray-300 rounded-3xl p-10 flex flex-col items-center justify-center cursor-pointer hover:border-[#F1C40F] hover:bg-yellow-50/30 transition-all">
+                    <div className="bg-gray-100 p-4 rounded-xl mb-5 text-gray-500"><FileSpreadsheet size={32}/></div>
+                    <h3 className="font-black text-lg text-gray-900 mb-2">Extrato Financeiro (Kwai)</h3>
+                    <p className="text-sm text-gray-500 mb-6 text-center font-medium h-8">{kwaiData.length > 0 ? <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-green-50 text-green-700 font-bold border border-green-200">{kwaiData.length} registros prontos</span> : 'Relatório de liquidação/saques'}</p>
+                    <div className="text-sm font-bold text-gray-700 bg-white border-2 border-gray-200 px-6 py-2.5 rounded-xl shadow-sm hover:border-gray-300 transition-colors">Selecionar Arquivo</div>
+                    <input type="file" className="hidden" onChange={(e) => lerPlanilha(e, setKwaiData)} />
+                  </label>
                 </div>
-                <button onClick={executarConciliacao} disabled={isSyncing} className={`w-full py-4 rounded-xl shadow-sm font-semibold text-sm flex items-center justify-center gap-2 transition-all border ${isSyncing ? 'bg-zinc-100 text-zinc-400 border-zinc-200 cursor-not-allowed' : 'bg-zinc-900 text-white border-zinc-900 hover:bg-zinc-800'}`}>{isSyncing ? <><Loader2 className="animate-spin" size={18}/> Processando reconciliação...</> : <><Database size={18}/> Executar Motor de Auditoria Kwai</>}</button>
+                <button onClick={executarConciliacao} disabled={isSyncing} className={`w-full py-5 rounded-2xl shadow-xl font-black text-lg uppercase tracking-widest flex items-center justify-center gap-3 transition-all ${isSyncing ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-[#111827] text-[#F1C40F] hover:shadow-2xl hover:-translate-y-1'}`}>{isSyncing ? <><Loader2 className="animate-spin" size={24}/> Processando reconciliação...</> : <><Database size={24}/> Executar Motor de Auditoria</>}</button>
               </div>
             )}
 
             {activeTab === 'divergencias' && (
               <div className="w-full animate-fade-in max-w-6xl mx-auto pb-10">
-                <SecaoHeader titulo="Painel de Discrepâncias" descricao="Rupturas do modelo de conformidade. Divergências financeiras (gaps > R$0.01) e quebras de SLA Logístico (> 22 dias)." />
-                {!resultados ? ( <div className="bg-white border border-zinc-200 rounded-xl p-12 text-center text-sm text-zinc-500">Workspace não inicializado.</div> ) : (
-                  <div className="grid grid-cols-1 gap-6 w-full">
-                    <div className="bg-white border border-zinc-200 rounded-xl shadow-sm flex flex-col min-h-[400px] overflow-hidden w-full">
-                      <div className="p-4 border-b border-zinc-100 bg-zinc-50/50 flex justify-between items-center">
-                        <div><h3 className="font-semibold text-sm text-zinc-900 flex items-center gap-2"><AlertTriangle size={16} className="text-red-500"/> Anomalias Financeiras</h3><p className="text-xs text-zinc-500 mt-0.5">{resultados.divergencias.length} registros violados.</p></div>
+                <SecaoHeader titulo="Painel de Divergências" icone={AlertTriangle} descricao="Onde recuperamos o seu dinheiro. Identificamos falhas de taxas, fretes não autorizados e atrasos logísticos (além de 22 dias) para você abrir chamado na plataforma." />
+                {!resultados ? ( <div className="bg-white border border-gray-200 rounded-3xl p-16 text-center text-lg font-bold text-gray-400">Auditoria não inicializada.</div> ) : (
+                  <div className="grid grid-cols-1 gap-8 w-full">
+                    <div className="bg-white border border-gray-100 rounded-3xl shadow-sm flex flex-col min-h-[400px] overflow-hidden w-full relative">
+                      <div className="absolute top-0 left-0 w-2 h-full bg-red-500"></div>
+                      <div className="p-6 border-b border-gray-100 bg-gray-50 flex justify-between items-center ml-2">
+                        <div><h3 className="font-black text-xl text-gray-900 flex items-center gap-2">Divergências Financeiras & Fretes</h3><p className="text-sm font-medium text-gray-500 mt-1">{resultados.divergencias.length} registros violados.</p></div>
                         {resultados.divergencias.length > 0 && (
-                          <div className="flex gap-2"><button onClick={() => exportarExcel(resultados.divergencias, "Divergencias_Financeiras")} className="bg-white text-zinc-700 border border-zinc-200 px-3 py-1.5 rounded-md font-medium text-xs flex items-center gap-2 hover:bg-zinc-50 shadow-sm transition-colors">Excel</button><button onClick={() => exportarPDF(resultados.divergencias, "Relatorio de Anomalias Financeiras", "Divergencias_Financeiras")} className="bg-white text-zinc-700 border border-zinc-200 px-3 py-1.5 rounded-md font-medium text-xs flex items-center gap-2 hover:bg-zinc-50 shadow-sm transition-colors">PDF</button></div>
+                          <div className="flex gap-2"><button onClick={() => exportarExcel(resultados.divergencias, "Divergencias_Financeiras")} className="bg-white text-gray-700 border-2 border-gray-200 px-5 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-gray-100 transition-colors shadow-sm"><Download size={16}/> Baixar Excel</button><button onClick={() => exportarPDF(resultados.divergencias, "Relatorio de Anomalias Financeiras", "Divergencias_Financeiras")} className="bg-red-50 text-red-700 border-2 border-red-100 px-5 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-red-100 transition-colors shadow-sm"><FileJson size={16}/> Gerar PDF</button></div>
                         )}
                       </div>
-                      <div className="overflow-y-auto flex-1">
+                      <div className="overflow-y-auto flex-1 ml-2">
                         <table className="w-full text-left text-sm">
-                          <thead className="bg-zinc-50/50 text-zinc-500 sticky top-0 border-b border-zinc-200">
-                            <tr><th className="p-4 font-medium">Tracking ID</th><th className="p-4 font-medium">Análise Forense</th><th className="p-4 text-right font-medium">Modelo Base</th><th className="p-4 text-right font-medium">Liquidado</th><th className="p-4 text-right font-medium text-zinc-900">Gap Identificado</th></tr>
+                          <thead className="bg-gray-50 text-gray-500 sticky top-0 border-b border-gray-100 font-bold uppercase text-[11px] tracking-wider">
+                            <tr><th className="p-5">ID do Pedido</th><th className="p-5">Análise Forense (Motivo)</th><th className="p-5 text-right">Repasse Correto</th><th className="p-5 text-right">Liquidado</th><th className="p-5 text-right text-red-600">Diferença (Cobrar)</th></tr>
                           </thead>
-                          <tbody className="divide-y divide-zinc-100">
+                          <tbody className="divide-y divide-gray-100">
                             {resultados.divergencias.map((item: any, idx: number) => (
-                              <tr key={idx} className="hover:bg-zinc-50 transition-colors">
-                                <td className="p-4 font-mono text-xs text-zinc-900">{item["ID do Pedido"]}</td>
-                                <td className="p-4"><span className="inline-flex items-center px-2 py-1 rounded-md text-[10px] font-semibold tracking-wide uppercase bg-red-50 text-red-700 ring-1 ring-inset ring-red-600/10">{item["Análise Forense"] || item["Motivo"]}</span></td>
-                                <td className="p-4 text-right text-zinc-500">R$ {item["Esperado Kwai"]?.toFixed(2) || '0.00'}</td>
-                                <td className="p-4 text-right text-zinc-500">R$ {item["Receita Liquidada"]?.toFixed(2) || '0.00'}</td>
-                                <td className="p-4 text-right font-medium text-red-600">R$ {item["Diferença / Gap"]?.toFixed(2)}</td>
+                              <tr key={idx} className="hover:bg-red-50/40 transition-colors">
+                                <td className="p-5 font-mono text-xs font-bold text-gray-700">{item["ID do Pedido"]}</td>
+                                <td className="p-5"><span className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold bg-red-100 text-red-700 border border-red-200">{item["Análise Forense"] || item["Motivo"]}</span></td>
+                                <td className="p-5 text-right font-semibold text-gray-500">R$ {item["Esperado Kwai"]?.toFixed(2) || '0.00'}</td>
+                                <td className="p-5 text-right font-semibold text-gray-500">R$ {item["Receita Liquidada"]?.toFixed(2) || '0.00'}</td>
+                                <td className="p-5 text-right font-black text-red-600 text-base">R$ {item["Diferença / Gap"]?.toFixed(2)}</td>
                               </tr>
                             ))}
                           </tbody>
                         </table>
-                        {resultados.divergencias.length === 0 && <div className="p-12 text-center text-sm text-zinc-500">Nenhuma anomalia crítica.</div>}
+                        {resultados.divergencias.length === 0 && <div className="p-16 text-center text-lg font-bold text-gray-400">Nenhuma anomalia crítica.</div>}
                       </div>
                     </div>
 
-                    <div className="bg-white border border-zinc-200 rounded-xl shadow-sm flex flex-col min-h-[300px] overflow-hidden w-full">
-                      <div className="p-4 border-b border-zinc-100 bg-zinc-50/50 flex justify-between items-center">
-                        <div><h3 className="font-semibold text-sm text-zinc-900 flex items-center gap-2"><Hourglass size={16} className="text-amber-500"/> Atrasos / SLAs Violados</h3><p className="text-xs text-zinc-500 mt-0.5">{resultados.atrasados.length} pedidos em atraso logístico.</p></div>
+                    <div className="bg-white border border-gray-100 rounded-3xl shadow-sm flex flex-col min-h-[300px] overflow-hidden w-full relative">
+                      <div className="absolute top-0 left-0 w-2 h-full bg-orange-500"></div>
+                      <div className="p-6 border-b border-gray-100 bg-gray-50 flex justify-between items-center ml-2">
+                        <div><h3 className="font-black text-xl text-gray-900 flex items-center gap-2">Atrasos / Quebras de SLA</h3><p className="text-sm font-medium text-gray-500 mt-1">{resultados.atrasados.length} pedidos pendentes fora da janela.</p></div>
                         {resultados.atrasados.length > 0 && (
-                           <div className="flex gap-2"><button onClick={() => exportarExcel(resultados.atrasados, "Atrasados")} className="bg-white text-zinc-700 border border-zinc-200 px-3 py-1.5 rounded-md font-medium text-xs flex items-center gap-2 hover:bg-zinc-50 shadow-sm transition-colors">Excel</button></div>
+                           <div className="flex gap-2"><button onClick={() => exportarExcel(resultados.atrasados, "Atrasados")} className="bg-white text-gray-700 border-2 border-gray-200 px-5 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-gray-100 transition-colors shadow-sm"><Download size={16}/> Baixar Excel</button><button onClick={() => exportarPDF(resultados.atrasados, "Dossie de Atrasos", "Atrasados")} className="bg-orange-50 text-orange-700 border-2 border-orange-100 px-5 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-orange-100 transition-colors shadow-sm"><FileJson size={16}/> Gerar PDF</button></div>
                         )}
                       </div>
-                      <div className="overflow-y-auto flex-1">
+                      <div className="overflow-y-auto flex-1 ml-2">
                         <table className="w-full text-left text-sm">
-                          <thead className="bg-zinc-50/50 text-zinc-500 sticky top-0 border-b border-zinc-200">
-                            <tr><th className="p-4 font-medium">Tracking ID</th><th className="p-4 text-right font-medium">Exposure Estimado</th></tr>
+                          <thead className="bg-gray-50 text-gray-500 sticky top-0 border-b border-gray-100 font-bold uppercase text-[11px] tracking-wider">
+                            <tr><th className="p-5">ID do Pedido</th><th className="p-5 text-right">Repasse Retido Estimado</th></tr>
                           </thead>
-                          <tbody className="divide-y divide-zinc-100">
+                          <tbody className="divide-y divide-gray-100">
                             {resultados.atrasados.map((item: any, idx: number) => (
-                              <tr key={idx} className="hover:bg-zinc-50 transition-colors">
-                                <td className="p-4 font-mono text-xs text-zinc-900">{item["ID do Pedido"]}</td>
-                                <td className="p-4 text-right font-medium text-amber-600">R$ {item["Repasse Atrasado Estimado (R$)"]?.toFixed(2) || item["Atraso Retido (R$)"].toFixed(2)}</td>
+                              <tr key={idx} className="hover:bg-orange-50/40 transition-colors">
+                                <td className="p-5 font-mono text-xs font-bold text-gray-700">{item["ID do Pedido"]}</td>
+                                <td className="p-5 text-right font-black text-orange-600 text-base">R$ {item["Repasse Atrasado Estimado (R$)"]?.toFixed(2) || item["Atraso Retido (R$)"].toFixed(2)}</td>
                               </tr>
                             ))}
                           </tbody>
                         </table>
-                        {resultados.atrasados.length === 0 && <div className="p-12 text-center text-sm text-zinc-500">Nenhum backlog fora da janela.</div>}
+                        {resultados.atrasados.length === 0 && <div className="p-16 text-center text-lg font-bold text-gray-400">Nenhum atraso identificado.</div>}
                       </div>
                     </div>
                   </div>
@@ -597,55 +676,57 @@ export default function Dashboard({ session }: any) {
             )}
 
             {activeTab === 'amostras' && (
-              <div className="w-full animate-fade-in max-w-5xl mx-auto pb-10">
-                <SecaoHeader titulo="Amostras & Anomalias Base" descricao="Pedidos processados com Valor Real de Venda <= R$ 1,00 ou com divergência entre preço declarado e preço liquidado." />
-                {!resultados ? ( <div className="bg-white border border-zinc-200 rounded-xl p-12 text-center text-sm text-zinc-500">Workspace não inicializado.</div> ) : (
-                  <div className="grid grid-cols-1 gap-6 w-full">
-                    <div className="bg-white rounded-xl shadow-sm border border-zinc-200 overflow-hidden w-full">
-                      <div className="p-4 border-b border-zinc-100 bg-zinc-50/50 flex justify-between items-center"><h3 className="font-semibold text-sm text-zinc-900">Flag: Possíveis Amostras / Promoções</h3></div>
-                      <div className="max-h-[50vh] overflow-y-auto">
+              <div className="w-full animate-fade-in max-w-6xl mx-auto pb-10">
+                <SecaoHeader titulo="Amostras & Divergências de Base" icone={Search} descricao="Identificação de pedidos processados com Valor Real de Venda inferior a R$ 1,00 (possíveis amostras) e divergências estruturais de preço entre a base logística e financeira." />
+                {!resultados ? ( <div className="bg-white border border-gray-200 rounded-3xl p-16 text-center text-lg font-bold text-gray-400">Auditoria não inicializada.</div> ) : (
+                  <div className="grid grid-cols-1 gap-8 w-full">
+                    <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden w-full relative">
+                      <div className="absolute top-0 left-0 w-2 h-full bg-blue-500"></div>
+                      <div className="p-6 border-b border-gray-100 bg-gray-50 flex justify-between items-center ml-2"><h3 className="font-black text-xl text-gray-900">Flag: Possíveis Amostras / Promoções</h3></div>
+                      <div className="max-h-[50vh] overflow-y-auto ml-2">
                         <table className="w-full text-left text-sm">
-                          <thead className="bg-zinc-50/50 text-zinc-500 font-medium sticky top-0 border-b border-zinc-200">
-                            <tr><th className="p-4 font-medium">Tracking ID</th><th className="p-4 font-medium">Valor Real da Venda</th><th className="p-4 font-medium">Status Atual</th><th className="p-4 text-right font-medium">Ação do Auditor</th></tr>
+                          <thead className="bg-gray-50 text-gray-500 sticky top-0 border-b border-gray-100 font-bold uppercase text-[11px] tracking-wider">
+                            <tr><th className="p-5">ID do Pedido</th><th className="p-5">Valor Real Processado</th><th className="p-5">Status Interno</th><th className="p-5 text-right">Ação Requerida</th></tr>
                           </thead>
-                          <tbody className="divide-y divide-zinc-100">
+                          <tbody className="divide-y divide-gray-100">
                             {resultados.amostras.map((item: any, idx: number) => (
-                              <tr key={idx} className="hover:bg-zinc-50 transition-colors">
-                                <td className="p-4 font-mono text-xs text-zinc-900">{item["ID do Pedido"]}</td>
-                                <td className="p-4 text-zinc-700">R$ {item["Valor Real"]?.toFixed(2) || item["Valor Real de Venda"]?.toFixed(2)}</td>
-                                <td className="p-4"><span className={`inline-flex items-center px-2 py-1 rounded-md text-[10px] font-semibold tracking-wide uppercase ring-1 ring-inset ${item["Status"] === 'AMOSTRA_CONFIRMADA' ? 'bg-blue-50 text-blue-700 ring-blue-600/20' : 'bg-amber-50 text-amber-700 ring-amber-600/20'}`}>{item["Status"]}</span></td>
-                                <td className="p-4 text-right">
+                              <tr key={idx} className="hover:bg-blue-50/30 transition-colors">
+                                <td className="p-5 font-mono text-xs font-bold text-gray-700">{item["ID do Pedido"]}</td>
+                                <td className="p-5 font-black text-gray-800">R$ {item["Valor Real"]?.toFixed(2) || item["Valor Real de Venda"]?.toFixed(2)}</td>
+                                <td className="p-5"><span className={`inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold uppercase border ${item["Status"] === 'AMOSTRA_CONFIRMADA' ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200'}`}>{item["Status"].replace('_', ' ')}</span></td>
+                                <td className="p-5 text-right">
                                   {item["Status"] !== 'AMOSTRA_CONFIRMADA' ? (
-                                    <button onClick={() => confirmarAmostra(item["ID do Pedido"])} className="text-xs bg-zinc-900 text-white px-3 py-1.5 rounded-md hover:bg-zinc-800 transition-colors flex items-center gap-1 ml-auto"><Check size={14}/> Confirmar Amostra</button>
-                                  ) : <span className="text-xs text-zinc-400">Verificado</span>}
+                                    <button onClick={() => confirmarAmostra(item["ID do Pedido"])} className="text-sm font-bold bg-[#111827] text-white px-4 py-2 rounded-xl hover:bg-gray-800 transition-all shadow-md flex items-center gap-2 ml-auto"><Check size={16}/> Confirmar</button>
+                                  ) : <span className="text-sm font-bold text-gray-400 bg-gray-100 px-4 py-2 rounded-xl">Verificado</span>}
                                 </td>
                               </tr>
                             ))}
                           </tbody>
                         </table>
-                        {resultados.amostras.length === 0 && <p className="text-zinc-500 text-sm text-center py-12">Nenhuma amostra detectada.</p>}
+                        {resultados.amostras.length === 0 && <p className="text-gray-400 font-bold text-lg text-center py-16">Nenhuma amostra detectada.</p>}
                       </div>
                     </div>
 
-                    <div className="bg-white rounded-xl shadow-sm border border-zinc-200 overflow-hidden w-full">
-                      <div className="p-4 border-b border-zinc-100 bg-zinc-50/50 flex justify-between items-center"><h3 className="font-semibold text-sm text-zinc-900">Flag: Divergência de Preço (Base UPSeller vs Kwai)</h3></div>
-                      <div className="max-h-[50vh] overflow-y-auto">
+                    <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden w-full relative">
+                      <div className="absolute top-0 left-0 w-2 h-full bg-purple-500"></div>
+                      <div className="p-6 border-b border-gray-100 bg-gray-50 flex justify-between items-center ml-2"><h3 className="font-black text-xl text-gray-900">Flag: Divergência Estrutural de Preço (UPSeller x Kwai)</h3></div>
+                      <div className="max-h-[50vh] overflow-y-auto ml-2">
                         <table className="w-full text-left text-sm">
-                          <thead className="bg-zinc-50/50 text-zinc-500 font-medium sticky top-0 border-b border-zinc-200">
-                            <tr><th className="p-4 font-medium">Tracking ID</th><th className="p-4 font-medium">Valor Base UPSeller</th><th className="p-4 font-medium">Preço Orig. Kwai</th><th className="p-4 text-right font-medium">Desvio</th></tr>
+                          <thead className="bg-gray-50 text-gray-500 sticky top-0 border-b border-gray-100 font-bold uppercase text-[11px] tracking-wider">
+                            <tr><th className="p-5">ID do Pedido</th><th className="p-5">Valor Base Declarado</th><th className="p-5">Preço Kwai Identificado</th><th className="p-5 text-right">Desvio</th></tr>
                           </thead>
-                          <tbody className="divide-y divide-zinc-100">
+                          <tbody className="divide-y divide-gray-100">
                             {resultados.divergenciasPreco.map((item: any, idx: number) => (
-                              <tr key={idx} className="hover:bg-zinc-50 transition-colors">
-                                <td className="p-4 font-mono text-xs text-zinc-900">{item["ID"] || item["ID do Pedido"]}</td>
-                                <td className="p-4 text-zinc-700">R$ {item["Preço UPSeller"]?.toFixed(2) || '---'}</td>
-                                <td className="p-4 text-zinc-700">R$ {item["Preço Kwai"]?.toFixed(2) || '---'}</td>
-                                <td className="p-4 text-right text-amber-600 font-medium">R$ {item["Gap"]?.toFixed(2) || '---'}</td>
+                              <tr key={idx} className="hover:bg-purple-50/30 transition-colors">
+                                <td className="p-5 font-mono text-xs font-bold text-gray-700">{item["ID"] || item["ID do Pedido"]}</td>
+                                <td className="p-5 font-bold text-gray-600">R$ {item["Preço UPSeller"]?.toFixed(2) || '---'}</td>
+                                <td className="p-5 font-bold text-gray-600">R$ {item["Preço Kwai"]?.toFixed(2) || '---'}</td>
+                                <td className="p-5 text-right text-purple-600 font-black text-base">R$ {item["Gap"]?.toFixed(2) || '---'}</td>
                               </tr>
                             ))}
                           </tbody>
                         </table>
-                        {resultados.divergenciasPreco.length === 0 && <p className="text-zinc-500 text-sm text-center py-12">Nenhuma divergência de preço detectada na camada 2.</p>}
+                        {resultados.divergenciasPreco.length === 0 && <p className="text-gray-400 font-bold text-lg text-center py-16">Nenhuma divergência de preço detectada.</p>}
                       </div>
                     </div>
                   </div>
@@ -655,21 +736,21 @@ export default function Dashboard({ session }: any) {
 
             {activeTab === 'aguardando' && (
               <div className="w-full animate-fade-in max-w-5xl mx-auto pb-10">
-                <SecaoHeader titulo="Pipeline Logístico (No Prazo)" descricao="Pedidos que constam na base logística, mas ainda estão dentro da janela de liquidação padrão da plataforma." />
-                {!resultados ? ( <div className="bg-white border border-zinc-200 rounded-xl p-12 text-center text-sm text-zinc-500">Workspace não inicializado.</div> ) : (
-                  <div className="bg-white rounded-xl shadow-sm border border-zinc-200 overflow-hidden w-full">
-                    <div className="p-3 border-b border-zinc-100 bg-zinc-50/50 flex justify-end gap-2">
-                       {resultados.noPrazo.length > 0 && (<button onClick={() => exportarExcel(resultados.noPrazo, "No_Prazo")} className="bg-white text-zinc-700 border border-zinc-200 px-3 py-1.5 rounded-md font-medium text-xs flex items-center gap-2 hover:bg-zinc-50 shadow-sm transition-colors"><Download size={14}/> CSV</button>)}
+                <SecaoHeader titulo="Pedidos no Prazo" icone={Hourglass} descricao="Fique tranquilo. Estes pedidos foram enviados e processados na UPSeller, mas ainda estão dentro do ciclo de 22 dias da Kwai para serem liquidados." />
+                {!resultados ? ( <div className="bg-white border border-gray-200 rounded-3xl p-16 text-center text-lg font-bold text-gray-400">Auditoria não inicializada.</div> ) : (
+                  <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden w-full">
+                    <div className="p-4 border-b border-gray-100 bg-gray-50 flex justify-end gap-2">
+                       {resultados.noPrazo.length > 0 && (<button onClick={() => exportarExcel(resultados.noPrazo, "No_Prazo")} className="bg-white text-gray-700 border-2 border-gray-200 px-5 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-gray-100 transition-colors shadow-sm"><Download size={16}/> Exportar Excel</button>)}
                     </div>
                     <div className="max-h-[60vh] overflow-y-auto">
-                      <table className="w-full text-left text-sm"><thead className="bg-zinc-50/50 text-zinc-500 font-medium sticky top-0 border-b border-zinc-200"><tr><th className="p-4 font-medium">Tracking ID</th><th className="p-4 font-medium">Forecast Vencimento</th><th className="p-4 text-right font-medium">Valor Base (R$)</th></tr></thead>
-                        <tbody className="divide-y divide-zinc-100">
+                      <table className="w-full text-left text-sm"><thead className="bg-gray-50 text-gray-500 sticky top-0 border-b border-gray-100 font-bold uppercase text-[11px] tracking-wider"><tr><th className="p-5">ID do Pedido</th><th className="p-5">Vencimento Esperado</th><th className="p-5 text-right">Estimativa Bruta (R$)</th></tr></thead>
+                        <tbody className="divide-y divide-gray-100">
                           {resultados.noPrazo.map((item: any, idx: number) => (
-                            <tr key={idx} className="hover:bg-zinc-50 transition-colors"><td className="p-4 font-mono text-xs text-zinc-900">{item["ID do Pedido"]}</td><td className="p-4"><span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-zinc-100 text-zinc-700">{item["Vencimento Esperado"]}</span></td><td className="p-4 text-right text-zinc-900">{item["Valor Estimado (R$)"]?.toFixed(2) || item["Valor Estimado Bruto (R$)"]?.toFixed(2) || item["Valor Real (R$)"]?.toFixed(2)}</td></tr>
+                            <tr key={idx} className="hover:bg-gray-50 transition-colors"><td className="p-5 font-mono text-xs font-bold text-gray-600">{item["ID do Pedido"]}</td><td className="p-5"><span className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold bg-yellow-50 text-yellow-700 border border-yellow-200">{item["Vencimento Esperado"]}</span></td><td className="p-5 text-right font-black text-gray-800 text-base">{item["Valor Estimado (R$)"]?.toFixed(2) || item["Valor Real (R$)"]?.toFixed(2)}</td></tr>
                           ))}
                         </tbody>
                       </table>
-                      {resultados.noPrazo.length === 0 && <p className="text-zinc-500 text-sm text-center py-12">Sem dados em trânsito.</p>}
+                      {resultados.noPrazo.length === 0 && <p className="text-gray-400 font-bold text-lg text-center py-16">Sem pedidos pendentes no prazo.</p>}
                     </div>
                   </div>
                 )}
@@ -678,19 +759,19 @@ export default function Dashboard({ session }: any) {
 
             {activeTab === 'malhafina' && (
               <div className="w-full animate-fade-in max-w-5xl mx-auto pb-10">
-                <SecaoHeader titulo="Data Quarantine (Cancelados)" descricao="Registros segregados para evitar distorção nas métricas de performance." />
-                {!resultados ? ( <div className="bg-white border border-zinc-200 rounded-xl p-12 text-center text-sm text-zinc-500">Workspace não inicializado.</div> ) : (
-                  <div className="bg-white rounded-xl shadow-sm border border-zinc-200 overflow-hidden w-full">
-                    <div className="p-3 border-b border-zinc-100 bg-zinc-50/50 flex justify-end gap-2">{resultados.cancelados.length > 0 && (<button onClick={() => exportarExcel(resultados.cancelados, "Quarentena")} className="bg-white text-zinc-700 border border-zinc-200 px-3 py-1.5 rounded-md font-medium text-xs flex items-center gap-2 hover:bg-zinc-50 shadow-sm transition-colors"><Download size={14}/> CSV</button>)}</div>
+                <SecaoHeader titulo="Quarentena (Cancelados)" icone={Ban} descricao="Transparência total. Separamos e isolamos todos os pedidos marcados como Cancelados, Devolvidos ou Reembolsados para não inflar artificialmente o seu painel de vendas." />
+                {!resultados ? ( <div className="bg-white border border-gray-200 rounded-3xl p-16 text-center text-lg font-bold text-gray-400">Auditoria não inicializada.</div> ) : (
+                  <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden w-full">
+                    <div className="p-4 border-b border-gray-100 bg-gray-50 flex justify-end gap-2">{resultados.cancelados.length > 0 && (<button onClick={() => exportarExcel(resultados.cancelados, "Quarentena")} className="bg-white text-gray-700 border-2 border-gray-200 px-5 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-gray-100 transition-colors shadow-sm"><Download size={16}/> Exportar Excel</button>)}</div>
                     <div className="max-h-[60vh] overflow-y-auto">
-                      <table className="w-full text-left text-sm"><thead className="bg-zinc-50/50 text-zinc-500 font-medium sticky top-0 border-b border-zinc-200"><tr><th className="p-4 font-medium">Tracking ID</th><th className="p-4 font-medium">Flag</th><th className="p-4 text-right font-medium">Valor Original (Base UPSeller)</th></tr></thead>
-                        <tbody className="divide-y divide-zinc-100">
+                      <table className="w-full text-left text-sm"><thead className="bg-gray-50 text-gray-500 sticky top-0 border-b border-gray-100 font-bold uppercase text-[11px] tracking-wider"><tr><th className="p-5">ID do Pedido</th><th className="p-5">Status Final</th><th className="p-5 text-right">Valor Original (Base)</th></tr></thead>
+                        <tbody className="divide-y divide-gray-100">
                           {resultados.cancelados.map((item: any, idx: number) => (
-                            <tr key={idx} className="hover:bg-zinc-50 transition-colors"><td className="p-4 font-mono text-xs text-zinc-900">{item["ID do Pedido"]}</td><td className="p-4"><span className="inline-flex items-center px-2 py-1 rounded-md text-[10px] font-semibold tracking-wide uppercase bg-zinc-100 text-zinc-600 ring-1 ring-inset ring-zinc-500/10">{item["Status"] || item["Status UPSeller"]}</span></td><td className="p-4 text-right text-zinc-400 line-through">R$ {item["Valor UPSeller Base"]?.toFixed(2) || item["Valor Registrado"]?.toFixed(2) || '0.00'}</td></tr>
+                            <tr key={idx} className="hover:bg-gray-50 transition-colors"><td className="p-5 font-mono text-xs font-bold text-gray-600">{item["ID do Pedido"]}</td><td className="p-5"><span className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold uppercase bg-gray-100 text-gray-600 border border-gray-200">{item["Status"] || item["Status UPSeller"]}</span></td><td className="p-5 text-right font-black text-gray-400 line-through">R$ {item["Valor UPSeller Base"]?.toFixed(2) || item["Valor Registrado"]?.toFixed(2) || item["Valor de Face"]?.toFixed(2) || '0.00'}</td></tr>
                           ))}
                         </tbody>
                       </table>
-                      {resultados.cancelados.length === 0 && <p className="text-zinc-500 text-sm text-center py-12">Nenhum evento registrado.</p>}
+                      {resultados.cancelados.length === 0 && <p className="text-gray-400 font-bold text-lg text-center py-16">Nenhum evento registrado na quarentena.</p>}
                     </div>
                   </div>
                 )}
@@ -698,13 +779,23 @@ export default function Dashboard({ session }: any) {
             )}
 
             {activeTab === 'lucro' && (
-              <div className="w-full animate-fade-in max-w-5xl mx-auto pb-10">
-                <SecaoHeader titulo="Statements (P&L)" descricao="Demonstrativo de Resultado com base nas regras de auditoria e COGS." />
-                {!resultados ? ( <div className="bg-white border border-zinc-200 rounded-xl p-12 text-center text-sm text-zinc-500">Workspace não inicializado.</div> ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="bg-white p-6 rounded-xl border border-zinc-200 shadow-sm flex flex-col justify-center"><p className="text-xs font-medium text-zinc-500 uppercase tracking-widest mb-2">Net Sales (Valor Real)</p><p className="text-3xl font-semibold tracking-tight text-zinc-900">R$ {resultados.valorBruto.toLocaleString('pt-BR', {minimumFractionDigits:2})}</p></div>
-                    <div className="bg-white p-6 rounded-xl border border-zinc-200 shadow-sm flex flex-col justify-center"><p className="text-xs font-medium text-zinc-500 uppercase tracking-widest mb-2">COGS (Custos)</p><p className="text-3xl font-semibold tracking-tight text-zinc-500">- R$ {resultados.custoTotal.toLocaleString('pt-BR', {minimumFractionDigits:2})}</p></div>
-                    <div className="bg-zinc-900 p-6 rounded-xl shadow-lg flex flex-col justify-center border border-zinc-800 relative overflow-hidden"><div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500 opacity-10 rounded-full blur-2xl -mr-10 -mt-10"></div><p className="text-xs font-medium text-zinc-400 uppercase tracking-widest mb-2 relative z-10">Net Profit</p><p className="text-4xl font-semibold tracking-tight text-emerald-400 relative z-10">R$ {resultados.lucroLiquido.toLocaleString('pt-BR', {minimumFractionDigits:2})}</p></div>
+              <div className="w-full animate-fade-in max-w-6xl mx-auto pb-10">
+                <SecaoHeader titulo="DRE & Lucratividade Real" icone={LineChart} descricao="A verdade crua sobre o seu negócio. Cruzamos os repasses validados, descontamos as comissões, isolamos as divergências e subtraímos o custo dos produtos para revelar o que realmente sobrou." />
+                {!resultados ? ( <div className="bg-white border border-gray-200 rounded-3xl p-16 text-center text-lg font-bold text-gray-400">Auditoria não inicializada.</div> ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center hover:-translate-y-1 transition-transform">
+                      <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Venda Líquida Processada</p>
+                      <p className="text-4xl font-black tracking-tight text-gray-900">R$ {resultados.valorBruto.toLocaleString('pt-BR', {minimumFractionDigits:2})}</p>
+                    </div>
+                    <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center hover:-translate-y-1 transition-transform">
+                      <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Custos de Produto (COGS)</p>
+                      <p className="text-4xl font-black tracking-tight text-gray-500">- R$ {resultados.custoTotal.toLocaleString('pt-BR', {minimumFractionDigits:2})}</p>
+                    </div>
+                    <div className="bg-gradient-to-br from-[#10b981] to-emerald-600 p-8 rounded-3xl shadow-2xl text-white relative overflow-hidden hover:scale-105 transition-transform cursor-default border border-emerald-500">
+                       <div className="absolute top-0 right-0 w-40 h-40 bg-white opacity-10 rounded-full blur-3xl -mr-10 -mt-10"></div>
+                       <p className="text-xs font-black text-emerald-100 uppercase tracking-widest mb-3 relative z-10">Lucro Líquido no Bolso</p>
+                       <p className="text-5xl font-black tracking-tight text-white relative z-10">R$ {resultados.lucroLiquido.toLocaleString('pt-BR', {minimumFractionDigits:2})}</p>
+                    </div>
                   </div>
                 )}
               </div>
