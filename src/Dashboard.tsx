@@ -7,14 +7,13 @@ import {
   PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, Legend 
 } from 'recharts';
 import { 
-  LayoutDashboard, UploadCloud, Hourglass, Download, FileSpreadsheet, AlertTriangle, Loader2, Database, LogOut, FileJson, Ban, Package, LineChart, Save, Trash2, Archive, CheckCircle2, Search, ShieldCheck, Check, ChevronDown, Smartphone, ShoppingBag, Video, Store
+  UploadCloud, Hourglass, Download, FileSpreadsheet, AlertTriangle, Loader2, Database, LogOut, FileJson, Package, Save, Trash2, Archive, CheckCircle2, ShieldCheck, Check, ChevronDown, Smartphone, ShoppingBag, Video, Store
 } from 'lucide-react';
 
 export default function Dashboard({ session }: any) {
-  // Estados de Navegação Modular
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [marketplace, setMarketplace] = useState('kwai'); // Controla qual plataforma está ativa
-  const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({ kwai: true }); // Controla quais menus estão abertos
+  const [marketplace, setMarketplace] = useState('kwai'); 
+  const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({ kwai: true }); 
 
   const [isSyncing, setIsSyncing] = useState(false);
   const [isF5Loading, setIsF5Loading] = useState(true);
@@ -41,7 +40,6 @@ export default function Dashboard({ session }: any) {
     if (data) setMeusProdutos(data);
   };
 
-  // LÓGICA ESTRITA DO KWAI MANTIDA INTACTA
   const carregarDashboardDoBanco = async () => {
     const { data: dbOrders } = await supabase.from('pedidos_kwai').select('*').eq('user_id', session.user.id);
     if (!dbOrders || dbOrders.length === 0) {
@@ -355,7 +353,6 @@ export default function Dashboard({ session }: any) {
     setActiveTab('dashboard');
   };
 
-  // NAVEGAÇÃO ACORDEÃO (Menu Lateral Modular)
   const toggleMenu = (menu: string) => {
     setOpenMenus(prev => ({ ...prev, [menu]: !prev[menu] }));
   };
