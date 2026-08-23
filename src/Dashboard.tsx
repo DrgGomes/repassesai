@@ -7,7 +7,7 @@ import {
   PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, Legend 
 } from 'recharts';
 import { 
-  LayoutDashboard, UploadCloud, Hourglass, Download, FileSpreadsheet, AlertTriangle, Loader2, Database, LogOut, FileJson, Ban, Package, LineChart, Save, Trash2, Archive, CheckCircle2, Search, ShieldCheck
+  LayoutDashboard, UploadCloud, Hourglass, Download, FileSpreadsheet, AlertTriangle, Loader2, Database, LogOut, FileJson, Ban, Package, LineChart, Save, Trash2, Archive, Search, ShieldCheck
 } from 'lucide-react';
 
 export default function Dashboard({ session }: any) {
@@ -20,7 +20,6 @@ export default function Dashboard({ session }: any) {
   
   const [meusProdutos, setMeusProdutos] = useState<any[]>([]);
 
-  // Paleta refinada: Emerald, Amber, Red, Blue, Slate
   const COLORS = ['#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#64748b'];
 
   useEffect(() => {
@@ -364,7 +363,6 @@ export default function Dashboard({ session }: any) {
     return <div className="h-screen w-full flex items-center justify-center bg-[#FAFAFA]"><Loader2 className="animate-spin text-zinc-400" size={32} /></div>;
   }
 
-  // Componente Header Rigoroso (Estilo Vercel/Linear)
   const SecaoHeader = ({ titulo, descricao }: any) => (
     <div className="mb-8 border-b border-zinc-200 pb-5">
       <h2 className="text-2xl font-semibold tracking-tight text-zinc-900">{titulo}</h2>
@@ -375,7 +373,6 @@ export default function Dashboard({ session }: any) {
   return (
     <div className="flex h-screen w-full bg-[#FAFAFA] text-zinc-900 font-sans antialiased overflow-hidden selection:bg-emerald-100 selection:text-emerald-900">
       
-      {/* SIDEBAR ULTRA-MINIMALISTA */}
       <div className="w-64 bg-[#09090B] flex-shrink-0 flex flex-col justify-between overflow-y-auto border-r border-zinc-800">
         <div className="p-6">
           <div className="flex items-center gap-3 mb-10 px-2">
@@ -403,7 +400,6 @@ export default function Dashboard({ session }: any) {
 
       <div className="flex-1 h-full overflow-y-auto p-10 relative">
         
-        {/* DASHBOARD - COM DADOS */}
         {activeTab === 'dashboard' && resultados && (
           <div className="w-full animate-fade-in max-w-6xl mx-auto pb-10">
             <div className="flex justify-between items-end mb-8 border-b border-zinc-200 pb-5">
@@ -443,7 +439,6 @@ export default function Dashboard({ session }: any) {
           </div>
         )}
         
-        {/* DASHBOARD - SEM DADOS (HOME DIDÁTICA REFINADA) */}
         {activeTab === 'dashboard' && !resultados && (
            <div className="w-full animate-fade-in max-w-4xl mx-auto flex flex-col items-center justify-center min-h-[80vh]">
              <div className="absolute top-6 right-6">
@@ -486,7 +481,6 @@ export default function Dashboard({ session }: any) {
            </div>
         )}
 
-        {/* TAB 2: UPLOAD */}
         {activeTab === 'upload' && (
           <div className="w-full animate-fade-in max-w-4xl mx-auto pb-10">
              <SecaoHeader titulo="Data Ingestion" descricao="Faça o upload dos arquivos originais em formato Excel (.xlsx ou .xls) exportados diretamente das plataformas." />
@@ -519,7 +513,6 @@ export default function Dashboard({ session }: any) {
           </div>
         )}
 
-        {/* TAB 3: AGUARDANDO NO PRAZO */}
         {activeTab === 'aguardando' && (
           <div className="w-full animate-fade-in max-w-5xl mx-auto pb-10">
             <SecaoHeader titulo="Pipeline Logístico (No Prazo)" descricao="Pedidos que constam na base logística, mas ainda estão dentro da janela de liquidação padrão da plataforma." />
@@ -530,7 +523,7 @@ export default function Dashboard({ session }: any) {
                    {resultados.noPrazo.length > 0 && (
                      <>
                         <button onClick={() => exportarExcel(resultados.noPrazo, "No_Prazo")} className="bg-white text-zinc-700 border border-zinc-200 px-3 py-1.5 rounded-md font-medium text-xs flex items-center gap-2 hover:bg-zinc-50 shadow-sm transition-colors"><Download size={14}/> CSV / Excel</button>
-                        <button onClick={() => exportarPDF(resultados.noPrazo, "Pedidos no Pipeline de Liquidação", "No_Prazo")} className="bg-white text-zinc-700 border border-zinc-200 px-3 py-1.5 rounded-md font-medium text-xs flex items-center gap-2 hover:bg-zinc-50 shadow-sm transition-colors"><FileJson size={14}/> PDF Document</button>
+                        <button onClick={() => exportarPDF(resultados.noPrazo, "Pedidos no Pipeline de Liquidacao", "No_Prazo")} className="bg-white text-zinc-700 border border-zinc-200 px-3 py-1.5 rounded-md font-medium text-xs flex items-center gap-2 hover:bg-zinc-50 shadow-sm transition-colors"><FileJson size={14}/> PDF Document</button>
                      </>
                    )}
                 </div>
@@ -556,7 +549,6 @@ export default function Dashboard({ session }: any) {
           </div>
         )}
 
-        {/* TAB 4: DIVERGÊNCIAS E ATRASOS */}
         {activeTab === 'divergencias' && (
           <div className="w-full animate-fade-in max-w-6xl mx-auto pb-10">
             <SecaoHeader titulo="Painel de Discrepâncias" descricao="Registros onde o algoritmo detectou anomalias entre as regras comerciais aplicadas e a liquidação efetiva da plataforma." />
@@ -564,7 +556,6 @@ export default function Dashboard({ session }: any) {
             {!resultados ? ( <div className="bg-white border border-zinc-200 rounded-xl p-12 text-center text-sm text-zinc-500">Workspace não inicializado.</div> ) : (
               <div className="grid grid-cols-1 gap-6 w-full">
                 
-                {/* DIVERGÊNCIAS FINANCEIRAS */}
                 <div className="bg-white border border-zinc-200 rounded-xl shadow-sm flex flex-col min-h-[400px] overflow-hidden w-full">
                   <div className="p-4 border-b border-zinc-100 bg-zinc-50/50 flex justify-between items-center">
                     <div>
@@ -574,7 +565,7 @@ export default function Dashboard({ session }: any) {
                     {resultados.divergencias.length > 0 && (
                       <div className="flex gap-2">
                          <button onClick={() => exportarExcel(resultados.divergencias, "Divergencias_Financeiras")} className="bg-white text-zinc-700 border border-zinc-200 px-3 py-1.5 rounded-md font-medium text-xs flex items-center gap-2 hover:bg-zinc-50 shadow-sm transition-colors"><Download size={14}/> Dados (Excel)</button>
-                         <button onClick={() => exportarPDF(resultados.divergencias, "Relatório de Anomalias Financeiras", "Divergencias_Financeiras")} className="bg-white text-zinc-700 border border-zinc-200 px-3 py-1.5 rounded-md font-medium text-xs flex items-center gap-2 hover:bg-zinc-50 shadow-sm transition-colors"><FileJson size={14}/> Dossiê PDF</button>
+                         <button onClick={() => exportarPDF(resultados.divergencias, "Relatorio de Anomalias Financeiras", "Divergencias_Financeiras")} className="bg-white text-zinc-700 border border-zinc-200 px-3 py-1.5 rounded-md font-medium text-xs flex items-center gap-2 hover:bg-zinc-50 shadow-sm transition-colors"><FileJson size={14}/> Dossiê PDF</button>
                       </div>
                     )}
                   </div>
@@ -599,7 +590,6 @@ export default function Dashboard({ session }: any) {
                   </div>
                 </div>
 
-                {/* ATRASADOS */}
                 <div className="bg-white border border-zinc-200 rounded-xl shadow-sm flex flex-col min-h-[300px] overflow-hidden w-full">
                   <div className="p-4 border-b border-zinc-100 bg-zinc-50/50 flex justify-between items-center">
                     <div>
@@ -609,7 +599,7 @@ export default function Dashboard({ session }: any) {
                     {resultados.atrasados.length > 0 && (
                        <div className="flex gap-2">
                           <button onClick={() => exportarExcel(resultados.atrasados, "Atrasados")} className="bg-white text-zinc-700 border border-zinc-200 px-3 py-1.5 rounded-md font-medium text-xs flex items-center gap-2 hover:bg-zinc-50 shadow-sm transition-colors"><Download size={14}/> Dados (Excel)</button>
-                          <button onClick={() => exportarPDF(resultados.atrasados, "Dossiê de Violações de SLA", "Atrasados")} className="bg-white text-zinc-700 border border-zinc-200 px-3 py-1.5 rounded-md font-medium text-xs flex items-center gap-2 hover:bg-zinc-50 shadow-sm transition-colors"><FileJson size={14}/> Dossiê PDF</button>
+                          <button onClick={() => exportarPDF(resultados.atrasados, "Dossie de Violacoes de SLA", "Atrasados")} className="bg-white text-zinc-700 border border-zinc-200 px-3 py-1.5 rounded-md font-medium text-xs flex items-center gap-2 hover:bg-zinc-50 shadow-sm transition-colors"><FileJson size={14}/> Dossiê PDF</button>
                        </div>
                     )}
                   </div>
@@ -636,7 +626,6 @@ export default function Dashboard({ session }: any) {
           </div>
         )}
 
-        {/* TAB 5: MALHA FINA */}
         {activeTab === 'malhafina' && (
           <div className="w-full animate-fade-in max-w-5xl mx-auto pb-10">
             <SecaoHeader titulo="Data Quarantine (Cancelados)" descricao="Registros segregados para evitar distorção nas métricas de performance comercial (Pós-venda e Cancelamentos)." />
@@ -673,7 +662,6 @@ export default function Dashboard({ session }: any) {
           </div>
         )}
 
-        {/* TAB 6: PRODUTOS */}
         {activeTab === 'produtos' && (
           <div className="w-full animate-fade-in max-w-6xl mx-auto pb-10">
             <div className="flex justify-between items-end mb-8 border-b border-zinc-200 pb-5">
@@ -720,7 +708,6 @@ export default function Dashboard({ session }: any) {
           </div>
         )}
 
-        {/* TAB 7: LUCRATIVIDADE */}
         {activeTab === 'lucro' && (
           <div className="w-full animate-fade-in max-w-5xl mx-auto pb-10">
             <SecaoHeader titulo="Statements (P&L)" descricao="Demonstrativo de Resultado com base nas regras de auditoria e COGS atribuídos." />
