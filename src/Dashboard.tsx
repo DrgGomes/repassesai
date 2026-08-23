@@ -36,28 +36,29 @@ export default function Dashboard({ session }: any) {
   };
 
   const carregarDashboardDoBanco = async () => {
+    // Carrega dados base do banco para visualização rápida (DRE e status gerais)
     const { data: dbOrders } = await supabase.from('pedidos_kwai').select('*').eq('user_id', session.user.id);
     if (!dbOrders || dbOrders.length === 0) return;
 
-    // AQUI ESTÁ A CORREÇÃO DO TYPESCRIPT (: any[])
-    let atrasados: any[] = [], indevidos: any[] = [], noPrazo: any[] = [], corretos: any[] = [], cancelados: any[] = [];
+    let atrasados: any[] = [], divergencias: any[] = [], noPrazo: any[] = [], corretos: any[] = [], cancelados: any[] = [];
     let valorBruto = 0, totalRetido = 0, custoTotal = 0, lucroLiquido = 0;
 
     dbOrders.forEach(order => {
        if (order.status === 'CANCELADO_DEVOLVIDO') {
-           cancelados.push({ "ID do Pedido": order.id_pedido, "Status": "Cancelado/Devolvido", "Valor Original (R$)": Number(order.valor_bruto) });
+           cancelados.push({ "ID do Pedido": order.id_pedido, "Status": "Cancelado/Devolvido", "Valor Registrado": Number(order.valor_bruto) });
        } else {
            valorBruto += Number(order.valor_bruto);
            custoTotal += Number(order.custo_pedido);
-           const repasseEsperado = order.valor_bruto - ((order.valor_bruto * 0.20) + ((order.qtd || 1) * 4.00));
            
            if (order.status === 'NO_PRAZO') {
-               noPrazo.push({ "ID do Pedido": order.id_pedido, "Vencimento Esperado": new Date(order.vencimento_esperado).toLocaleDateString(), "Valor Cliente (R$)": Number(order.valor_bruto) });
+               noPrazo.push({ "ID do Pedido": order.id_pedido, "Vencimento Esperado": new Date(order.vencimento_esperado).toLocaleDateString(), "Valor Estimado (R$)": Number(order.valor_bruto) });
            } else if (order.status === 'ATRASADO') {
-               atrasados.push({ "ID do Pedido": order.id_pedido, "Repasse Atrasado (R$)": Number(repasseEsperado.toFixed(2)) });
-               totalRetido += repasseEsperado;
-           } else if (order.status === 'TAXA_INDEVIDA') {
-               indevidos.push({ "ID do Pedido": order.id_pedido, "Roubo na Taxa (R$)": Number(order.roubo_taxa) });
+               // Estimativa com base no valor bruto para itens não recebidos da Kwai ainda
+               const repasseEstimado = order.valor_bruto - ((order.valor_bruto * 0.20) + ((order.qtd || 1) * 4.00));
+               atrasados.push({ "ID do Pedido": order.id_pedido, "Repasse Atrasado Estimado (R$)": Number(repasseEstimado.toFixed(2)) });
+               totalRetido += repasseEstimado;
+           } else if (order.status === 'DIVERGENCIA_FINANCEIRA' || order.status === 'DIVERGENCIA_FRETE') {
+               divergencias.push({ "ID do Pedido": order.id_pedido, "Motivo": order.status, "Diferença (R$)": Number(order.roubo_taxa) });
                totalRetido += Number(order.roubo_taxa);
                lucroLiquido += Number(order.lucro_pedido);
            } else if (order.status === 'PAGO_CORRETO') {
@@ -68,7 +69,7 @@ export default function Dashboard({ session }: any) {
     });
 
     setResultados({
-        atrasados, indevidos, noPrazo, corretos, cancelados, 
+        atrasados, divergencias, noPrazo, corretos, cancelados, 
         valorBruto: Number(valorBruto.toFixed(2)), 
         totalRetido: Number(totalRetido.toFixed(2)), 
         custoTotal: Number(custoTotal.toFixed(2)),
@@ -76,7 +77,7 @@ export default function Dashboard({ session }: any) {
         chartStatus: [
           {name:'Corretos',value:corretos.length},
           {name:'Prazo',value:noPrazo.length},
-          {name:'Indevido',value:indevidos.length},
+          {name:'Divergência',value:divergencias.length},
           {name:'Atrasado',value:atrasados.length},
           {name:'Cancelados',value:cancelados.length}
         ].filter(i=>i.value>0) 
@@ -110,19 +111,19 @@ export default function Dashboard({ session }: any) {
     if (!resultados) return alert("Processe os dados primeiro.");
     const dossieAuditoria = {
       informacoes_sistema: {
-        plataforma: "Repasse.AI SaaS",
-        regras_matematicas_aplicadas: "Taxa Base Kwai 20% + R$ 4,00 por item.",
+        plataforma: "Repasse.AI SaaS (Auditoria Forense)",
+        regras_matematicas_aplicadas: "Valor Real = (Preço Original - Subvenção Comercial). Taxas aplicadas: 20% sobre Valor Real + R$ 4,00 por item. Custo de frete do vendedor classificado como divergência.",
         data_auditoria: new Date().toISOString()
       },
       resumo_financeiro: {
         volume_bruto_reais: resultados.valorBruto,
-        prejuizo_retido_reais: resultados.totalRetido,
+        prejuizo_retido_divergencias_reais: resultados.totalRetido,
         custo_produtos_reais: resultados.custoTotal,
         lucro_liquido_reais: resultados.lucroLiquido
       },
       detalhamento_pedidos: {
         pagos_corretamente: resultados.corretos,
-        taxas_indevidas: resultados.indevidos,
+        divergencias_financeiras_frete: resultados.divergencias,
         atrasados_retidos: resultados.atrasados,
         no_prazo_logistico: resultados.noPrazo,
         ignorados_por_cancelamento: resultados.cancelados
@@ -154,6 +155,7 @@ export default function Dashboard({ session }: any) {
     if (upsellerData.length === 0 && kwaiData.length === 0) return alert("⚠️ Suba os arquivos.");
     setIsSyncing(true);
 
+    // 1. AUTO-CADASTRO INTELIGENTE
     const produtosExtraidos = new Map();
     upsellerData.forEach(row => {
       const sku = extrair(row, ['sku', 'especificação', 'código', 'id do produto']);
@@ -182,12 +184,13 @@ export default function Dashboard({ session }: any) {
     });
     if (maxKwaiDate.getTime() === 0) maxKwaiDate = new Date(); 
 
+    // 2. BASE LOGÍSTICA PELA UPSELLER (Lista de Presença)
     upsellerData.forEach(row => {
       const idPedido = String(extrair(row, ['nº de pedido', 'pedido', 'order id']) || '');
       if (!idPedido) return;
       
       const statusPos = extrair(row, ['pós-venda', 'cancelado', 'devolvido', 'status']);
-      const valorPedido = Number(extrair(row, ['valor do pedido', 'valor'])) || 0;
+      const valorPedido = Number(extrair(row, ['valor do pedido', 'valor'])) || 0; // Usado apenas como referência inicial/estimativa
       const dataStr = extrair(row, ['hora de envio', 'hora do pedido', 'data']);
       const dEnvio = dataStr ? new Date(String(dataStr).replace(' ', 'T')) : new Date(0);
       const dVencimento = new Date(dEnvio.getTime() + (22 * 86400000));
@@ -203,33 +206,102 @@ export default function Dashboard({ session }: any) {
       else if (dVencimento < maxKwaiDate) status = "ATRASADO";
 
       if (!orderMap.has(idPedido)) {
-        orderMap.set(idPedido, { id_pedido: idPedido, valor_bruto: valorPedido, data_envio: dEnvio.toISOString(), vencimento_esperado: dVencimento.toISOString(), status: status, receita_kwai: 0, roubo_taxa: 0, custo_pedido: (custoUnitario * qtd), lucro_pedido: 0, sku: sku, qtd: qtd, user_id: session.user.id });
+        orderMap.set(idPedido, { 
+          id_pedido: idPedido, 
+          valor_bruto: valorPedido, // Estimativa prévia
+          data_envio: dEnvio.toISOString(), 
+          vencimento_esperado: dVencimento.toISOString(), 
+          status: status, 
+          receita_kwai: 0, 
+          roubo_taxa: 0, 
+          custo_pedido: (custoUnitario * qtd), 
+          lucro_pedido: 0, 
+          sku: sku, 
+          qtd: qtd, 
+          user_id: session.user.id 
+        });
       }
     });
 
-    kwaiData.forEach(row => {
-      const idKwai = String(extrair(row, ['número do pedido', 'pedido', 'id']) || '');
-      const statusLiq = extrair(row, ['status de liquidação', 'status']);
-      if (!idKwai || String(statusLiq).includes('Cancelar')) return;
-      
-      const recKwai = Number(extrair(row, ['receita', 'valor', 'repasse'])) || 0;
-      let order = orderMap.get(idKwai);
-      
-      if (order && order.status !== 'CANCELADO_DEVOLVIDO') {
-         const taxaRegra = (order.valor_bruto * 0.20) + (order.qtd * 4.00);
-         const cobradoAMais = (order.valor_bruto - recKwai) - taxaRegra;
-         
-         order.receita_kwai = recKwai;
-         order.lucro_pedido = recKwai - order.custo_pedido;
-         
-         if (cobradoAMais > 0.50) {
-            order.roubo_taxa = cobradoAMais;
-            order.status = "TAXA_INDEVIDA";
-         } else {
-            order.roubo_taxa = 0;
-            order.status = "PAGO_CORRETO";
-         }
-      }
+    // LISTAS AUDITORIA PERFEITA (Para popular os resultados)
+    let atrasados: any[] = [], divergencias: any[] = [], noPrazo: any[] = [], corretos: any[] = [], cancelados: any[] = [];
+    let valorBrutoGeral = 0, totalDiferencas = 0, custoTotalGeral = 0, lucroLiquidoGeral = 0;
+
+    // 3. AUDITORIA FINANCEIRA FORENSE (KWAI)
+    // Varremos todos os pedidos mapeados e processamos se tiver dados no extrato
+    Array.from(orderMap.values()).forEach(order => {
+       const kwaiRow = kwaiData.find(r => String(extrair(r, ['número do pedido', 'pedido', 'id'])) === order.id_pedido);
+       
+       if (order.status === 'CANCELADO_DEVOLVIDO') {
+          cancelados.push({ "ID do Pedido": order.id_pedido, "Status Upseller": "Cancelado/Devolvido", "Valor de Referência (R$)": order.valor_bruto });
+          return;
+       }
+
+       if (!kwaiRow) {
+          // AINDA NÃO FOI PAGO PELA KWAI - Mantém estimativa Upseller
+          const repasseEstimado = order.valor_bruto - ((order.valor_bruto * 0.20) + (order.qtd * 4.00));
+          if (order.status === 'ATRASADO') {
+             atrasados.push({ "ID do Pedido": order.id_pedido, "Repasse Atrasado Estimado (R$)": Number(repasseEstimado.toFixed(2)) });
+             totalDiferencas += repasseEstimado;
+          } else {
+             noPrazo.push({ "ID do Pedido": order.id_pedido, "Vencimento Esperado": new Date(order.vencimento_esperado).toLocaleDateString(), "Valor Estimado (R$)": order.valor_bruto });
+          }
+          // Incrementa os globais considerando a estimativa bruta e de custo
+          valorBrutoGeral += order.valor_bruto;
+          custoTotalGeral += order.custo_pedido;
+
+       } else {
+          // KWAI PROCESSOU! APLICA A NOVA REGRA DE OURO
+          const precoOriginal = Number(extrair(kwaiRow, ['preço do produto'])) || order.valor_bruto;
+          const subvencaoAbs = Math.abs(Number(extrair(kwaiRow, ['subvenção ao comércio'])) || 0);
+          const freteCobradoVendedor = Math.abs(Number(extrair(kwaiRow, ['frete pago pelo vendedor'])) || 0);
+          const recKwai = Number(extrair(kwaiRow, ['receita', 'repasse'])) || 0;
+
+          // Matemática Base
+          const valorRealVenda = precoOriginal - subvencaoAbs;
+          const taxa20 = valorRealVenda * 0.20;
+          const taxaOp = order.qtd * 4.00;
+          const repasseEsperado = valorRealVenda - taxa20 - taxaOp;
+          const diferenca = repasseEsperado - recKwai;
+
+          // Atualiza registro interno para o Banco
+          order.valor_bruto = valorRealVenda; // Atualiza o Bruto para o valor real da venda
+          order.receita_kwai = recKwai;
+          order.lucro_pedido = recKwai - order.custo_pedido;
+          
+          valorBrutoGeral += valorRealVenda;
+          custoTotalGeral += order.custo_pedido;
+          lucroLiquidoGeral += order.lucro_pedido;
+
+          const baseReport = {
+             "ID do Pedido": order.id_pedido,
+             "Preço Original (R$)": Number(precoOriginal.toFixed(2)),
+             "Subvenção / Desconto Comercial (R$)": Number(-subvencaoAbs.toFixed(2)),
+             "Valor Real da Venda (R$)": Number(valorRealVenda.toFixed(2)),
+             "Taxa 20% (R$)": Number(-taxa20.toFixed(2)),
+             "Taxa Operacional (R$)": Number(-taxaOp.toFixed(2)),
+             "Repasse Esperado (R$)": Number(repasseEsperado.toFixed(2)),
+             "Receita Kwai Registrada (R$)": Number(recKwai.toFixed(2)),
+             "Diferença (R$)": Number(diferenca.toFixed(2))
+          };
+
+          if (Math.abs(diferenca) <= 0.50) {
+             order.roubo_taxa = 0;
+             order.status = "PAGO_CORRETO";
+             corretos.push({ ...baseReport, "STATUS": "🟢 CORRETO" });
+          } else {
+             order.roubo_taxa = diferenca;
+             totalDiferencas += diferenca;
+             
+             if (freteCobradoVendedor > 0) {
+                 order.status = "DIVERGENCIA_FRETE";
+                 divergencias.push({ ...baseReport, "Motivo": "Divergência de Frete (Cobrança ao vendedor identificada)", "STATUS": "🔴 DIVERGÊNCIA" });
+             } else {
+                 order.status = "DIVERGENCIA_FINANCEIRA";
+                 divergencias.push({ ...baseReport, "Motivo": "Divergência Financeira (Taxa incorreta ou desconto não autorizado)", "STATUS": "🔴 DIVERGÊNCIA" });
+             }
+          }
+       }
     });
 
     const registrosParaSalvar = Array.from(orderMap.values());
@@ -239,7 +311,21 @@ export default function Dashboard({ session }: any) {
       }
     } catch (e) { console.error(e) }
 
-    await carregarDashboardDoBanco(); 
+    setResultados({
+        atrasados, divergencias, noPrazo, corretos, cancelados, 
+        valorBruto: Number(valorBrutoGeral.toFixed(2)), 
+        totalRetido: Number(totalDiferencas.toFixed(2)), 
+        custoTotal: Number(custoTotalGeral.toFixed(2)),
+        lucroLiquido: Number(lucroLiquidoGeral.toFixed(2)),
+        chartStatus: [
+          {name:'Corretos',value:corretos.length},
+          {name:'Prazo',value:noPrazo.length},
+          {name:'Divergência',value:divergencias.length},
+          {name:'Atrasado',value:atrasados.length},
+          {name:'Cancelados',value:cancelados.length}
+        ].filter(i=>i.value>0) 
+    });
+
     setIsSyncing(false);
     setActiveTab('dashboard');
   };
@@ -257,7 +343,7 @@ export default function Dashboard({ session }: any) {
             <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 p-3 rounded-lg font-bold ${activeTab === 'dashboard' ? 'bg-[#F1C40F] text-black' : 'text-gray-400 hover:text-white'}`}><LayoutDashboard size={20}/> Visão Geral</button>
             <button onClick={() => setActiveTab('upload')} className={`w-full flex items-center gap-3 p-3 rounded-lg font-bold ${activeTab === 'upload' ? 'bg-[#F1C40F] text-black' : 'text-gray-400 hover:text-white'}`}><UploadCloud size={20}/> Nova Auditoria</button>
             <button onClick={() => setActiveTab('aguardando')} className={`w-full flex items-center gap-3 p-3 rounded-lg font-bold ${activeTab === 'aguardando' ? 'bg-[#F1C40F] text-black' : 'text-gray-400 hover:text-white'}`}><Hourglass size={20}/> No Prazo</button>
-            <button onClick={() => setActiveTab('cobranca')} className={`w-full flex items-center gap-3 p-3 rounded-lg font-bold ${activeTab === 'cobranca' ? 'bg-[#F1C40F] text-black' : 'text-gray-400 hover:text-white'}`}><AlertTriangle size={20}/> Fila de Cobrança</button>
+            <button onClick={() => setActiveTab('divergencias')} className={`w-full flex items-center gap-3 p-3 rounded-lg font-bold ${activeTab === 'divergencias' ? 'bg-[#F1C40F] text-black' : 'text-gray-400 hover:text-white'}`}><AlertTriangle size={20}/> Divergências / Atrasos</button>
             <button onClick={() => setActiveTab('malhafina')} className={`w-full flex items-center gap-3 p-3 rounded-lg font-bold ${activeTab === 'malhafina' ? 'bg-[#F1C40F] text-black' : 'text-gray-400 hover:text-white'}`}><Ban size={20}/> Malha Fina</button>
             
             <div className="h-px bg-gray-800 my-4"></div>
@@ -270,6 +356,7 @@ export default function Dashboard({ session }: any) {
 
       <div className="flex-1 h-full overflow-y-auto p-8">
         
+        {/* TAB 1: VISÃO GERAL */}
         {activeTab === 'dashboard' && resultados && (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 w-full animate-fade-in">
              <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center h-80 relative">
@@ -277,11 +364,11 @@ export default function Dashboard({ session }: any) {
               <h2 className="text-xl font-bold mb-6 text-gray-800">Visão Geral Financeira</h2>
               <div className="grid grid-cols-2 gap-6">
                 <div className="bg-blue-50 p-6 rounded-2xl">
-                  <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Volume Bruto</p>
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Valor Real de Venda</p>
                   <p className="text-3xl font-black text-gray-900">R$ {resultados.valorBruto.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
                 </div>
                 <div className="bg-red-50 p-6 rounded-2xl border border-red-100">
-                  <p className="text-xs font-bold text-red-600 uppercase tracking-widest mb-2">Prejuízo (Cobrar)</p>
+                  <p className="text-xs font-bold text-red-600 uppercase tracking-widest mb-2">Divergências (Cobrar)</p>
                   <p className="text-3xl font-black text-red-600">R$ {resultados.totalRetido.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
                 </div>
               </div>
@@ -303,6 +390,7 @@ export default function Dashboard({ session }: any) {
            </div>
         )}
 
+        {/* TAB 2: UPLOAD */}
         {activeTab === 'upload' && (
           <div className="w-full flex flex-col items-center gap-6 animate-fade-in">
              <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-8 mb-4">
@@ -310,17 +398,18 @@ export default function Dashboard({ session }: any) {
               <label className="border-2 border-dashed border-gray-300 bg-white rounded-3xl p-10 flex flex-col items-center cursor-pointer hover:border-[#F1C40F] transition-all"><FileSpreadsheet size={48} className="text-gray-400 mb-4"/><p className="font-bold text-gray-700">{kwaiData.length > 0 ? `${kwaiData.length} registros (Kwai)` : '2. Upload KWAI'}</p><input type="file" className="hidden" onChange={(e) => lerPlanilha(e, setKwaiData)} /></label>
             </div>
             <button onClick={executarConciliacao} disabled={isSyncing} className={`w-full py-6 rounded-2xl shadow-xl font-black text-xl uppercase tracking-widest flex items-center justify-center gap-3 transition-all ${isSyncing ? 'bg-gray-800 text-gray-400 cursor-not-allowed' : 'bg-[#1a1a1a] text-[#F1C40F] hover:-translate-y-1'}`}>
-              {isSyncing ? <><Loader2 className="animate-spin" size={24}/> Sincronizando com a Nuvem...</> : <><Database size={24}/> Processar Relatórios e Salvar</>}
+              {isSyncing ? <><Loader2 className="animate-spin" size={24}/> Sincronizando com a Nuvem...</> : <><Database size={24}/> Executar Auditoria Forense</>}
             </button>
           </div>
         )}
 
+        {/* TAB 3: AGUARDANDO NO PRAZO */}
         {activeTab === 'aguardando' && (
           <div className="w-full animate-fade-in">
             <header className="mb-8 flex justify-between items-center">
               <div>
                 <h2 className="text-3xl font-black text-gray-900 tracking-tight">Pedidos no Prazo</h2>
-                <p className="text-gray-500 mt-1">Ainda não completaram o ciclo logístico de 22 dias.</p>
+                <p className="text-gray-500 mt-1">Aguardando liquidação da plataforma.</p>
               </div>
               {resultados?.noPrazo.length > 0 && <button onClick={() => exportarExcel(resultados.noPrazo, "Aguardando_Vencimento")} className="bg-green-100 text-green-700 px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-green-200 transition-colors"><Download size={18}/> Exportar Excel</button>}
             </header>
@@ -329,14 +418,14 @@ export default function Dashboard({ session }: any) {
                 <div className="overflow-y-auto h-full p-0">
                   <table className="w-full text-left border-collapse">
                     <thead className="bg-gray-50 text-gray-500 text-xs uppercase font-bold sticky top-0 z-10 shadow-sm">
-                      <tr><th className="p-4">ID do Pedido</th><th className="p-4">Vencimento Esperado</th><th className="p-4 text-right">Valor Cliente (R$)</th></tr>
+                      <tr><th className="p-4">ID do Pedido</th><th className="p-4">Vencimento Esperado</th><th className="p-4 text-right">Valor Estimado</th></tr>
                     </thead>
                     <tbody className="text-sm">
                       {resultados.noPrazo.map((item: any, idx: number) => (
                         <tr key={idx} className="border-b border-gray-50 hover:bg-gray-50">
                           <td className="p-4 font-mono font-bold text-gray-700">{item["ID do Pedido"]}</td>
                           <td className="p-4 text-yellow-600 font-semibold">{item["Vencimento Esperado"]}</td>
-                          <td className="p-4 text-right font-bold text-gray-700">R$ {item["Valor Cliente (R$)"].toFixed(2)}</td>
+                          <td className="p-4 text-right font-bold text-gray-700">R$ {item["Valor Estimado (R$)"].toFixed(2)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -348,32 +437,64 @@ export default function Dashboard({ session }: any) {
           </div>
         )}
 
-        {activeTab === 'cobranca' && (
+        {/* TAB 4: DIVERGÊNCIAS E ATRASOS */}
+        {activeTab === 'divergencias' && (
           <div className="w-full animate-fade-in pb-10">
              <header className="mb-8">
-              <h2 className="text-3xl font-black text-gray-900 tracking-tight">Fila de Cobrança</h2>
-              <p className="text-gray-500 mt-1">Dossiês prontos para abrir chamado no suporte do Kwai.</p>
+              <h2 className="text-3xl font-black text-gray-900 tracking-tight">Divergências & Atrasos</h2>
+              <p className="text-gray-500 mt-1">Exportação em Excel configurada para abertura de chamados na Kwai.</p>
             </header>
             {!resultados ? ( <div className="bg-white rounded-3xl shadow-sm p-12 text-center border border-gray-100 text-gray-500 w-full">Nenhum dado processado.</div> ) : (
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 w-full">
-                <div className="bg-white border border-gray-100 rounded-3xl shadow-sm flex flex-col h-[75vh] overflow-hidden w-full">
+              <div className="grid grid-cols-1 gap-8 w-full">
+                
+                {/* DIVERGÊNCIAS FINANCEIRAS E DE FRETE */}
+                <div className="bg-white border border-gray-100 rounded-3xl shadow-sm flex flex-col h-[60vh] overflow-hidden w-full">
+                  <div className="bg-red-50 p-4 border-b border-red-100 flex justify-between items-center">
+                    <div>
+                      <h3 className="font-black text-red-800 text-lg flex items-center gap-2"><AlertTriangle size={20}/> Divergências Financeiras & Frete</h3>
+                      <p className="text-red-600 text-xs mt-1">{resultados.divergencias.length} pedidos com diferenças no repasse.</p>
+                    </div>
+                    {resultados.divergencias.length > 0 && <button onClick={() => exportarExcel(resultados.divergencias, "Divergencias_Financeiras")} className="bg-green-100 text-green-800 px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-1"><Download size={14}/> Excel</button>}
+                  </div>
+                  <div className="overflow-y-auto flex-1 p-0">
+                    <table className="w-full text-left">
+                      <thead className="bg-gray-50 text-gray-400 text-xs uppercase font-bold sticky top-0 z-10 shadow-sm">
+                        <tr><th className="p-4">ID</th><th className="p-4">Motivo</th><th className="p-4 text-right">Repasse Esperado</th><th className="p-4 text-right">Receita Kwai</th><th className="p-4 text-right text-red-500">Diferença (Cobrar)</th></tr>
+                      </thead>
+                      <tbody className="text-sm">
+                        {resultados.divergencias.map((item: any, idx: number) => (
+                          <tr key={idx} className="border-b border-gray-50 hover:bg-red-50/50">
+                            <td className="p-4 font-mono font-bold text-gray-700">{item["ID do Pedido"]}</td>
+                            <td className="p-4 text-xs font-semibold text-gray-600">{item["Motivo"]}</td>
+                            <td className="p-4 text-right text-gray-500">R$ {item["Repasse Esperado (R$)"]?.toFixed(2) || '0.00'}</td>
+                            <td className="p-4 text-right text-gray-500">R$ {item["Receita Kwai Registrada (R$)"]?.toFixed(2) || '0.00'}</td>
+                            <td className="p-4 text-right font-black text-[#e74c3c]">R$ {item["Diferença (R$)"]?.toFixed(2)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* ATRASADOS */}
+                <div className="bg-white border border-gray-100 rounded-3xl shadow-sm flex flex-col h-[40vh] overflow-hidden w-full">
                   <div className="bg-orange-50 p-4 border-b border-orange-100 flex justify-between items-center">
                     <div>
-                      <h3 className="font-black text-orange-800 text-lg flex items-center gap-2"><Hourglass size={20}/> Pedidos Atrasados</h3>
-                      <p className="text-orange-600 text-xs mt-1">{resultados.atrasados.length} pedidos retidos</p>
+                      <h3 className="font-black text-orange-800 text-lg flex items-center gap-2"><Hourglass size={20}/> Repasses Atrasados</h3>
+                      <p className="text-orange-600 text-xs mt-1">{resultados.atrasados.length} pedidos além dos 22 dias.</p>
                     </div>
                     {resultados.atrasados.length > 0 && <button onClick={() => exportarExcel(resultados.atrasados, "Atrasados_Kwai")} className="bg-green-100 text-green-800 px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-1"><Download size={14}/> Excel</button>}
                   </div>
                   <div className="overflow-y-auto flex-1 p-0">
                     <table className="w-full text-left">
                       <thead className="bg-gray-50 text-gray-400 text-xs uppercase font-bold sticky top-0 z-10 shadow-sm">
-                        <tr><th className="p-4">ID</th><th className="p-4 text-right">Repasse Atrasado</th></tr>
+                        <tr><th className="p-4">ID</th><th className="p-4 text-right">Repasse Atrasado Estimado</th></tr>
                       </thead>
                       <tbody className="text-sm">
                         {resultados.atrasados.map((item: any, idx: number) => (
                           <tr key={idx} className="border-b border-gray-50 hover:bg-orange-50/50">
                             <td className="p-4 font-mono font-bold text-gray-700">{item["ID do Pedido"]}</td>
-                            <td className="p-4 text-right font-black text-orange-600">R$ {item["Repasse Atrasado (R$)"].toFixed(2)}</td>
+                            <td className="p-4 text-right font-black text-orange-600">R$ {item["Repasse Atrasado Estimado (R$)"].toFixed(2)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -381,41 +502,18 @@ export default function Dashboard({ session }: any) {
                   </div>
                 </div>
 
-                <div className="bg-white border border-gray-100 rounded-3xl shadow-sm flex flex-col h-[75vh] overflow-hidden w-full">
-                  <div className="bg-red-50 p-4 border-b border-red-100 flex justify-between items-center">
-                    <div>
-                      <h3 className="font-black text-red-800 text-lg flex items-center gap-2"><AlertTriangle size={20}/> Taxa Indevida</h3>
-                      <p className="text-red-600 text-xs mt-1">{resultados.indevidos.length} fretes embutidos</p>
-                    </div>
-                    {resultados.indevidos.length > 0 && <button onClick={() => exportarExcel(resultados.indevidos, "TaxaIndevida_Kwai")} className="bg-green-100 text-green-800 px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-1"><Download size={14}/> Excel</button>}
-                  </div>
-                  <div className="overflow-y-auto flex-1 p-0">
-                    <table className="w-full text-left">
-                      <thead className="bg-gray-50 text-gray-400 text-xs uppercase font-bold sticky top-0 z-10 shadow-sm">
-                        <tr><th className="p-4">ID</th><th className="p-4 text-right">Valor Roubado</th></tr>
-                      </thead>
-                      <tbody className="text-sm">
-                        {resultados.indevidos.map((item: any, idx: number) => (
-                          <tr key={idx} className="border-b border-gray-50 hover:bg-red-50/50">
-                            <td className="p-4 font-mono font-bold text-gray-700">{item["ID do Pedido"]}</td>
-                            <td className="p-4 text-right font-black text-[#e74c3c]">R$ {item["Roubo na Taxa (R$)"].toFixed(2)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
               </div>
             )}
           </div>
         )}
 
+        {/* TAB 5: MALHA FINA */}
         {activeTab === 'malhafina' && (
           <div className="w-full animate-fade-in">
             <header className="mb-8 flex justify-between items-center">
               <div>
                 <h2 className="text-3xl font-black text-gray-900 tracking-tight">Malha Fina (Cancelados)</h2>
-                <p className="text-gray-500 mt-1">Pedidos que o sistema isolou para não inflar o seu Bruto.</p>
+                <p className="text-gray-500 mt-1">Pedidos isolados para não impactar a sua conciliação principal.</p>
               </div>
               {resultados?.cancelados.length > 0 && <button onClick={() => exportarExcel(resultados.cancelados, "Cancelados_Kwai")} className="bg-gray-200 text-gray-800 px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-gray-300 transition-colors"><Download size={18}/> Exportar Excel</button>}
             </header>
@@ -424,14 +522,14 @@ export default function Dashboard({ session }: any) {
                 <div className="overflow-y-auto h-full p-0">
                   <table className="w-full text-left border-collapse">
                     <thead className="bg-gray-100 text-gray-500 text-xs uppercase font-bold sticky top-0 z-10 shadow-sm">
-                      <tr><th className="p-4">ID do Pedido</th><th className="p-4">Status</th><th className="p-4 text-right">Valor Original</th></tr>
+                      <tr><th className="p-4">ID do Pedido</th><th className="p-4">Status</th><th className="p-4 text-right">Valor Original de Referência</th></tr>
                     </thead>
                     <tbody className="text-sm">
                       {resultados.cancelados.map((item: any, idx: number) => (
                         <tr key={idx} className="border-b border-gray-50 hover:bg-gray-50">
                           <td className="p-4 font-mono font-bold text-gray-700">{item["ID do Pedido"]}</td>
                           <td className="p-4 font-bold text-red-500">{item["Status"]}</td>
-                          <td className="p-4 text-right font-black text-gray-700">R$ {item["Valor Original (R$)"].toFixed(2)}</td>
+                          <td className="p-4 text-right font-black text-gray-700">R$ {item["Valor Registrado"] ? item["Valor Registrado"].toFixed(2) : item["Valor de Referência (R$)"].toFixed(2)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -443,6 +541,7 @@ export default function Dashboard({ session }: any) {
           </div>
         )}
 
+        {/* TAB 6: PRODUTOS */}
         {activeTab === 'produtos' && (
           <div className="w-full animate-fade-in">
             <header className="mb-8 flex justify-between items-end">
@@ -479,6 +578,7 @@ export default function Dashboard({ session }: any) {
           </div>
         )}
 
+        {/* TAB 7: LUCRATIVIDADE */}
         {activeTab === 'lucro' && (
           <div className="w-full animate-fade-in">
             <header className="mb-8">
@@ -488,7 +588,7 @@ export default function Dashboard({ session }: any) {
             {!resultados ? ( <div className="bg-white rounded-3xl shadow-sm p-12 text-center border border-gray-100 text-gray-500">Faça uma auditoria primeiro para gerar o DRE.</div> ) : (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                 <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-                  <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Volume Vendido (Bruto)</p>
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Valor Real de Venda</p>
                   <p className="text-2xl font-black text-gray-900">R$ {resultados.valorBruto.toLocaleString('pt-BR', {minimumFractionDigits:2})}</p>
                 </div>
                 <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
