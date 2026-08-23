@@ -1,4 +1,4 @@
-import { ArrowRight, ShieldCheck, Database, FileJson, LineChart, Search, Lock, Zap, FileSpreadsheet, Package, AlertTriangle, CheckCircle2, Clock, Ban, Quote } from 'lucide-react';
+import { ArrowRight, ShieldCheck, FileJson, LineChart, Search, Lock, Zap, Package, AlertTriangle, CheckCircle2, Clock, Ban, Quote } from 'lucide-react';
 
 export default function Landing({ onLoginClick }: { onLoginClick: () => void }) {
   return (
@@ -104,7 +104,8 @@ export default function Landing({ onLoginClick }: { onLoginClick: () => void }) 
                     <div key={i} className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl flex justify-between items-center">
                       <div>
                         <p className="text-xs text-zinc-500 font-mono mb-1">ID: 17652268416{i}4</p>
-                        <p className="text-sm font-bold text-zinc-300">Extraviado (> 35 dias)</p>
+                        {/* AQUI ESTÁ A CORREÇÃO DO CÓDIGO &gt; */}
+                        <p className="text-sm font-bold text-zinc-300">Extraviado (&gt; 35 dias)</p>
                       </div>
                       <div className="text-right">
                         <p className="text-orange-500 font-black">R$ 89,90</p>
