@@ -20,7 +20,8 @@ export default function Dashboard({ session }: any) {
   
   const [meusProdutos, setMeusProdutos] = useState<any[]>([]);
 
-  const COLORS = ['#10b981', '#F1C40F', '#e74c3c', '#94a3b8', '#6b7280'];
+  // Paleta refinada: Emerald, Amber, Red, Blue, Slate
+  const COLORS = ['#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#64748b'];
 
   useEffect(() => {
     const carregarTudo = async () => {
@@ -97,12 +98,11 @@ export default function Dashboard({ session }: any) {
   };
 
   const apagarTudo = async () => {
-    const confirmacao = window.confirm("CUIDADO! Isso vai apagar TODOS os pedidos do seu banco de dados para você recomeçar do zero. Seus produtos e custos serão mantidos. Deseja continuar?");
+    const confirmacao = window.confirm("Atenção: Todos os registros de pedidos serão apagados. Seus produtos serão mantidos. Confirmar?");
     if (!confirmacao) return;
     setIsF5Loading(true);
     await supabase.from('pedidos_kwai').delete().eq('user_id', session.user.id);
     setResultados(null);
-    alert("Sistema resetado com sucesso! Lousa em branco.");
     setIsF5Loading(false);
   };
 
@@ -132,18 +132,18 @@ export default function Dashboard({ session }: any) {
   const exportarPDF = (dados: any[], titulo: string, nomeArquivo: string) => {
     if (!dados || dados.length === 0) return alert("Não há dados.");
     const doc = new jsPDF('landscape'); 
-    doc.setFontSize(16);
-    doc.text(`REPASSE.AI - ${titulo}`, 14, 15);
-    doc.setFontSize(10);
-    doc.text(`Documento gerado e auditado em ${new Date().toLocaleDateString()}`, 14, 22);
+    doc.setFontSize(14);
+    doc.text(`REPASSE.AI | ${titulo}`, 14, 15);
+    doc.setFontSize(9);
+    doc.text(`Gerado em: ${new Date().toLocaleDateString()}`, 14, 22);
     
     autoTable(doc, {
       head: [Object.keys(dados[0])],
       body: dados.map(obj => Object.values(obj)),
       startY: 28,
-      styles: { fontSize: 8, cellPadding: 3 },
-      headStyles: { fillColor: [26, 26, 26], textColor: [255, 255, 255] },
-      alternateRowStyles: { fillColor: [245, 245, 245] }
+      styles: { fontSize: 8, cellPadding: 3, font: 'helvetica' },
+      headStyles: { fillColor: [9, 9, 11], textColor: [255, 255, 255] },
+      alternateRowStyles: { fillColor: [250, 250, 250] }
     });
     doc.save(`${nomeArquivo}.pdf`);
   };
@@ -180,9 +180,8 @@ export default function Dashboard({ session }: any) {
 
   const atualizarProduto = async (sku: string, custo: number, skuMaster: string) => {
     const { error } = await supabase.from('produtos').update({ custo: custo, sku_master: skuMaster || null }).eq('sku', sku).eq('user_id', session.user.id);
-    if (error) alert("Erro ao salvar produto.");
+    if (error) alert("Erro ao atualizar o registro.");
     else {
-      alert("Produto atualizado! Faça uma Nova Auditoria para recalcular o DRE com o novo custo.");
       carregarProdutos();
     }
   };
@@ -319,17 +318,17 @@ export default function Dashboard({ session }: any) {
           if (Math.abs(diferenca) <= 0.50) {
              order.roubo_taxa = 0;
              order.status = "PAGO_CORRETO";
-             corretos.push({ ...baseReport, "STATUS": "🟢 CORRETO" });
+             corretos.push({ ...baseReport, "STATUS": "CORRETO" });
           } else {
              order.roubo_taxa = diferenca;
              totalDiferencas += diferenca;
              
              if (freteCobradoVendedor > 0) {
                  order.status = "DIVERGENCIA_FRETE";
-                 divergencias.push({ ...baseReport, "Motivo": "Divergência de Frete", "STATUS": "🔴 DIVERGÊNCIA" });
+                 divergencias.push({ ...baseReport, "Motivo": "Divergência de Frete", "STATUS": "DIVERGÊNCIA" });
              } else {
                  order.status = "DIVERGENCIA_FINANCEIRA";
-                 divergencias.push({ ...baseReport, "Motivo": "Divergência Financeira", "STATUS": "🔴 DIVERGÊNCIA" });
+                 divergencias.push({ ...baseReport, "Motivo": "Divergência Financeira", "STATUS": "DIVERGÊNCIA" });
              }
           }
        }
@@ -362,191 +361,195 @@ export default function Dashboard({ session }: any) {
   };
 
   if (isF5Loading) {
-    return <div className="h-screen w-full flex items-center justify-center bg-gray-100"><Loader2 className="animate-spin text-[#F1C40F]" size={48} /></div>;
+    return <div className="h-screen w-full flex items-center justify-center bg-[#FAFAFA]"><Loader2 className="animate-spin text-zinc-400" size={32} /></div>;
   }
 
-  const SecaoHeader = ({ titulo, icone: Icon, descricao }: any) => (
-    <div className="bg-gradient-to-r from-gray-900 to-gray-800 rounded-3xl p-6 mb-8 text-white shadow-lg flex items-center gap-6 relative overflow-hidden">
-      <div className="absolute top-0 right-0 w-32 h-32 bg-[#F1C40F] opacity-10 rounded-full blur-3xl -mr-10 -mt-10"></div>
-      <div className="bg-gray-800/50 p-4 rounded-2xl border border-gray-700">
-        <Icon size={32} className="text-[#F1C40F]" />
-      </div>
-      <div>
-        <h2 className="text-2xl font-black tracking-tight">{titulo}</h2>
-        <p className="text-gray-300 font-medium text-sm mt-1 max-w-2xl">{descricao}</p>
-      </div>
+  // Componente Header Rigoroso (Estilo Vercel/Linear)
+  const SecaoHeader = ({ titulo, descricao }: any) => (
+    <div className="mb-8 border-b border-zinc-200 pb-5">
+      <h2 className="text-2xl font-semibold tracking-tight text-zinc-900">{titulo}</h2>
+      <p className="text-sm text-zinc-500 mt-1">{descricao}</p>
     </div>
   );
 
   return (
-    <div className="flex h-screen w-full bg-[#f8fafc] overflow-hidden font-sans">
-      <div className="w-64 bg-[#111827] text-gray-300 flex-shrink-0 flex flex-col justify-between overflow-y-auto border-r border-gray-800">
+    <div className="flex h-screen w-full bg-[#FAFAFA] text-zinc-900 font-sans antialiased overflow-hidden selection:bg-emerald-100 selection:text-emerald-900">
+      
+      {/* SIDEBAR ULTRA-MINIMALISTA */}
+      <div className="w-64 bg-[#09090B] flex-shrink-0 flex flex-col justify-between overflow-y-auto border-r border-zinc-800">
         <div className="p-6">
-          <div className="flex items-center gap-3 mb-10">
-            <div className="bg-[#F1C40F] p-2 rounded-xl"><ShieldCheck size={24} className="text-[#111827]" /></div>
-            <h1 className="text-2xl font-black text-white tracking-widest">REPASSE<span className="text-[#F1C40F]">.AI</span></h1>
+          <div className="flex items-center gap-3 mb-10 px-2">
+            <div className="bg-zinc-50 p-1.5 rounded-md"><ShieldCheck size={18} className="text-zinc-900" /></div>
+            <h1 className="text-base font-bold text-zinc-50 tracking-tight">REPASSE.AI</h1>
           </div>
           
-          <nav className="space-y-2">
-            <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeTab === 'dashboard' ? 'bg-[#F1C40F] text-[#111827] shadow-lg scale-105' : 'hover:bg-gray-800 hover:text-white'}`}><LayoutDashboard size={20}/> Visão Geral</button>
-            <button onClick={() => setActiveTab('upload')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeTab === 'upload' ? 'bg-[#F1C40F] text-[#111827] shadow-lg scale-105' : 'hover:bg-gray-800 hover:text-white'}`}><UploadCloud size={20}/> Nova Auditoria</button>
-            <button onClick={() => setActiveTab('aguardando')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeTab === 'aguardando' ? 'bg-[#F1C40F] text-[#111827] shadow-lg scale-105' : 'hover:bg-gray-800 hover:text-white'}`}><Hourglass size={20}/> No Prazo</button>
-            <button onClick={() => setActiveTab('divergencias')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeTab === 'divergencias' ? 'bg-[#F1C40F] text-[#111827] shadow-lg scale-105' : 'hover:bg-gray-800 hover:text-white'}`}><AlertTriangle size={20}/> Divergências / Atrasos</button>
-            <button onClick={() => setActiveTab('malhafina')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeTab === 'malhafina' ? 'bg-[#F1C40F] text-[#111827] shadow-lg scale-105' : 'hover:bg-gray-800 hover:text-white'}`}><Ban size={20}/> Malha Fina</button>
+          <nav className="space-y-1">
+            <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${activeTab === 'dashboard' ? 'bg-zinc-800/80 text-zinc-50' : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/40'}`}><LayoutDashboard size={16}/> Visão Geral</button>
+            <button onClick={() => setActiveTab('upload')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${activeTab === 'upload' ? 'bg-zinc-800/80 text-zinc-50' : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/40'}`}><UploadCloud size={16}/> Nova Auditoria</button>
+            <button onClick={() => setActiveTab('aguardando')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${activeTab === 'aguardando' ? 'bg-zinc-800/80 text-zinc-50' : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/40'}`}><Hourglass size={16}/> No Prazo</button>
+            <button onClick={() => setActiveTab('divergencias')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${activeTab === 'divergencias' ? 'bg-zinc-800/80 text-zinc-50' : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/40'}`}><AlertTriangle size={16}/> Divergências / Atrasos</button>
+            <button onClick={() => setActiveTab('malhafina')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${activeTab === 'malhafina' ? 'bg-zinc-800/80 text-zinc-50' : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/40'}`}><Ban size={16}/> Malha Fina</button>
             
-            <div className="h-px bg-gray-800 my-4 mx-2"></div>
-            <p className="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-2 ml-3">Inteligência de Negócio</p>
-            <button onClick={() => setActiveTab('produtos')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeTab === 'produtos' ? 'bg-[#10b981] text-white shadow-lg scale-105' : 'hover:bg-gray-800 hover:text-white'}`}><Package size={20}/> Meus Produtos</button>
-            <button onClick={() => setActiveTab('lucro')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeTab === 'lucro' ? 'bg-[#10b981] text-white shadow-lg scale-105' : 'hover:bg-gray-800 hover:text-white'}`}><LineChart size={20}/> Lucratividade</button>
+            <div className="h-px bg-zinc-800 my-4 mx-2"></div>
+            <p className="text-[10px] uppercase tracking-widest text-zinc-600 font-semibold mb-2 ml-3">Business Intelligence</p>
+            <button onClick={() => setActiveTab('produtos')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${activeTab === 'produtos' ? 'bg-emerald-500/10 text-emerald-400' : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/40'}`}><Package size={16}/> Meus Produtos</button>
+            <button onClick={() => setActiveTab('lucro')} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${activeTab === 'lucro' ? 'bg-emerald-500/10 text-emerald-400' : 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800/40'}`}><LineChart size={16}/> Lucratividade</button>
           </nav>
         </div>
-        <div className="p-6">
-          <button onClick={() => supabase.auth.signOut()} className="w-full flex items-center justify-center gap-2 p-3 text-red-400 bg-red-400/10 hover:bg-red-400/20 rounded-xl transition-colors font-bold"><LogOut size={18}/> Sair da Conta</button>
+        <div className="p-4 border-t border-zinc-800">
+          <button onClick={() => supabase.auth.signOut()} className="w-full flex items-center gap-3 px-3 py-2.5 text-zinc-500 hover:text-red-400 rounded-lg transition-colors text-sm font-medium"><LogOut size={16}/> Encerrar Sessão</button>
         </div>
       </div>
 
-      <div className="flex-1 h-full overflow-y-auto p-8 relative">
+      <div className="flex-1 h-full overflow-y-auto p-10 relative">
         
+        {/* DASHBOARD - COM DADOS */}
         {activeTab === 'dashboard' && resultados && (
-          <div className="w-full animate-fade-in pb-10">
-            <SecaoHeader titulo="Visão Geral Financeira" icone={LayoutDashboard} descricao="O raio-x completo do seu negócio. Acompanhe o volume real de vendas e identifique o capital retido por divergências das plataformas." />
+          <div className="w-full animate-fade-in max-w-6xl mx-auto pb-10">
+            <div className="flex justify-between items-end mb-8 border-b border-zinc-200 pb-5">
+               <div>
+                  <h2 className="text-2xl font-semibold tracking-tight text-zinc-900">Visão Geral</h2>
+                  <p className="text-sm text-zinc-500 mt-1">Métricas de volume e capital retido processadas na última auditoria.</p>
+               </div>
+               <div className="flex gap-2">
+                 <button onClick={exportarJSON} className="flex items-center gap-2 text-xs font-medium text-zinc-600 bg-white hover:bg-zinc-50 border border-zinc-200 px-3 py-2 rounded-lg transition-colors shadow-sm"><FileJson size={14}/> Dados Raw (JSON)</button>
+                 <button onClick={exportarBackupGeral} className="flex items-center gap-2 text-xs font-medium text-zinc-600 bg-white hover:bg-zinc-50 border border-zinc-200 px-3 py-2 rounded-lg transition-colors shadow-sm"><Archive size={14}/> Backup Completo</button>
+                 <button onClick={apagarTudo} className="flex items-center gap-2 text-xs font-medium text-red-600 bg-white hover:bg-red-50 border border-red-100 px-3 py-2 rounded-lg transition-colors shadow-sm"><Trash2 size={14}/></button>
+               </div>
+            </div>
             
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-               <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center h-80 relative group hover:shadow-md transition-shadow">
-                
-                <div className="absolute top-6 right-6 flex gap-2">
-                   <button onClick={exportarJSON} className="flex items-center gap-2 text-xs font-bold text-gray-500 bg-gray-50 hover:bg-gray-100 px-4 py-2 rounded-xl transition-colors border border-gray-200" title="Exportar JSON para Inteligência Artificial"><FileJson size={16}/> Prova Real (JSON)</button>
-                   <button onClick={exportarBackupGeral} className="flex items-center gap-2 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-xl transition-colors" title="Baixar todos os pedidos do Banco"><Archive size={16}/></button>
-                   <button onClick={apagarTudo} className="flex items-center gap-2 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 px-3 py-2 rounded-xl transition-colors" title="Apagar todos os dados para recomeçar"><Trash2 size={16}/></button>
-                </div>
-
-                <div className="grid grid-cols-2 gap-6 mt-8">
-                  <div className="bg-gradient-to-br from-gray-50 to-gray-100 p-6 rounded-2xl border border-gray-200">
-                    <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2 flex items-center gap-2"><CheckCircle2 size={14} className="text-green-500"/> Valor Real de Venda</p>
-                    <p className="text-3xl font-black text-gray-900">R$ {resultados.valorBruto.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
-                  </div>
-                  <div className="bg-gradient-to-br from-red-50 to-white p-6 rounded-2xl border border-red-100">
-                    <p className="text-xs font-bold text-red-600 uppercase tracking-widest mb-2 flex items-center gap-2"><AlertTriangle size={14}/> Divergências (Cobrar)</p>
-                    <p className="text-3xl font-black text-red-600">R$ {resultados.totalRetido.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
-                  </div>
-                </div>
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+              <div className="xl:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+                 <div className="bg-white p-6 rounded-xl border border-zinc-200 shadow-sm flex flex-col justify-center">
+                    <p className="text-xs font-medium text-zinc-500 uppercase tracking-widest mb-2 flex items-center gap-2">Valor Real Processado</p>
+                    <p className="text-4xl font-semibold tracking-tight text-zinc-900">R$ {resultados.valorBruto.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                 </div>
+                 <div className="bg-white p-6 rounded-xl border border-red-200 shadow-sm flex flex-col justify-center relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-6 opacity-10"><AlertTriangle size={64} className="text-red-500"/></div>
+                    <p className="text-xs font-medium text-red-600 uppercase tracking-widest mb-2 relative z-10">Divergências p/ Cobrança</p>
+                    <p className="text-4xl font-semibold tracking-tight text-red-600 relative z-10">R$ {resultados.totalRetido.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                 </div>
               </div>
 
-              <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 h-80 flex flex-col hover:shadow-md transition-shadow">
-                <h3 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-2">Status dos Pedidos</h3>
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart><Pie data={resultados.chartStatus} cx="50%" cy="50%" innerRadius="60%" outerRadius="80%" paddingAngle={5} dataKey="value">{resultados.chartStatus.map((_:any, index:number) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}</Pie><RechartsTooltip /><Legend verticalAlign="bottom" height={36}/></PieChart>
-                </ResponsiveContainer>
+              <div className="bg-white p-6 rounded-xl border border-zinc-200 shadow-sm flex flex-col min-h-[300px]">
+                <h3 className="text-xs font-medium text-zinc-500 uppercase tracking-widest mb-4">Status Logístico e Financeiro</h3>
+                <div className="flex-1 min-h-[200px]">
+                   <ResponsiveContainer width="100%" height="100%">
+                     <PieChart><Pie data={resultados.chartStatus} cx="50%" cy="50%" innerRadius="65%" outerRadius="85%" paddingAngle={2} dataKey="value" stroke="none">{resultados.chartStatus.map((_:any, index:number) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}</Pie><RechartsTooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e4e4e7', boxShadow: '0 1px 2px 0 rgb(0 0 0 / 0.05)' }}/><Legend verticalAlign="bottom" height={24} iconType="circle" wrapperStyle={{ fontSize: '12px' }}/></PieChart>
+                   </ResponsiveContainer>
+                </div>
               </div>
             </div>
           </div>
         )}
         
+        {/* DASHBOARD - SEM DADOS (HOME DIDÁTICA REFINADA) */}
         {activeTab === 'dashboard' && !resultados && (
-           <div className="w-full animate-fade-in relative max-w-5xl mx-auto">
-             <div className="absolute top-0 right-0 mt-4 mr-4">
-                <button onClick={apagarTudo} className="flex items-center gap-2 text-xs font-bold text-red-600 bg-white border border-red-100 shadow-sm hover:bg-red-50 px-4 py-2 rounded-xl transition-colors"><Trash2 size={16}/> Limpar Banco</button>
+           <div className="w-full animate-fade-in max-w-4xl mx-auto flex flex-col items-center justify-center min-h-[80vh]">
+             <div className="absolute top-6 right-6">
+                <button onClick={apagarTudo} className="flex items-center gap-2 text-xs font-medium text-red-600 bg-white hover:bg-red-50 border border-red-100 px-3 py-2 rounded-lg transition-colors shadow-sm"><Trash2 size={14}/> Limpar Instância</button>
              </div>
              
-             <div className="text-center mb-12 pt-10">
-               <div className="inline-flex items-center justify-center p-4 bg-[#F1C40F]/20 rounded-full mb-6">
-                 <ShieldCheck size={48} className="text-yellow-600" />
-               </div>
-               <h2 className="text-4xl font-black text-gray-900 tracking-tight mb-4">A primeira Auditoria Forense para Kwai.</h2>
-               <p className="text-gray-500 text-lg max-w-2xl mx-auto">Não confie em planilhas cegas. Nosso algoritmo destrincha as taxas reais e expõe os centavos que a plataforma tenta esconder de você.</p>
+             <div className="bg-white border border-zinc-200 p-4 rounded-2xl shadow-sm mb-8">
+               <ShieldCheck size={32} className="text-zinc-900" />
              </div>
+             
+             <h2 className="text-3xl font-semibold text-zinc-900 tracking-tight text-center mb-4">Auditoria Forense de Repasses</h2>
+             <p className="text-zinc-500 text-center max-w-xl mb-12 leading-relaxed">
+               Sistema de alta precisão projetado para reconciliar fluxos logísticos da UPSeller com extratos financeiros da Kwai, eliminando inconsistências e falsos positivos de cupons da plataforma.
+             </p>
 
-             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
-               <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 relative overflow-hidden group hover:-translate-y-2 transition-transform">
-                 <div className="absolute top-0 right-0 w-16 h-16 bg-blue-50 rounded-bl-full -mr-2 -mt-2 transition-transform group-hover:scale-150"></div>
-                 <Database size={32} className="text-blue-500 mb-6 relative z-10" />
-                 <h3 className="text-xl font-black text-gray-900 mb-2">1. Cruzamento Inteligente</h3>
-                 <p className="text-gray-500 text-sm">Basta subir seu relatório logístico da UPSeller e o financeiro da Kwai. O sistema cruza os IDs instantaneamente.</p>
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full mb-12">
+               <div className="bg-white p-6 rounded-xl border border-zinc-200 shadow-sm">
+                 <Database size={20} className="text-zinc-900 mb-4" />
+                 <h3 className="text-sm font-semibold text-zinc-900 mb-1">1. Entrada de Dados</h3>
+                 <p className="text-xs text-zinc-500 leading-relaxed">Cruzamento algorítmico do catálogo logístico (UPSeller) com o extrato consolidado de liquidação (Kwai).</p>
                </div>
                
-               <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 relative overflow-hidden group hover:-translate-y-2 transition-transform">
-                 <div className="absolute top-0 right-0 w-16 h-16 bg-yellow-50 rounded-bl-full -mr-2 -mt-2 transition-transform group-hover:scale-150"></div>
-                 <Search size={32} className="text-yellow-500 mb-6 relative z-10" />
-                 <h3 className="text-xl font-black text-gray-900 mb-2">2. A Regra de Ouro</h3>
-                 <p className="text-gray-500 text-sm">O sistema limpa a maquiagem da Kwai. O repasse correto é: <span className="font-bold text-gray-800 bg-gray-100 px-1 rounded">(Preço Original - Seu Desconto) - 20% - R$4.</span></p>
+               <div className="bg-white p-6 rounded-xl border border-zinc-200 shadow-sm relative">
+                 <div className="absolute top-0 right-0 w-1/2 h-full bg-gradient-to-l from-emerald-50/50 to-transparent pointer-events-none rounded-r-xl"></div>
+                 <Search size={20} className="text-emerald-600 mb-4" />
+                 <h3 className="text-sm font-semibold text-zinc-900 mb-1">2. Motor de Reconciliação</h3>
+                 <p className="text-xs text-zinc-500 leading-relaxed">Isola descontos comerciais. Base de cálculo exata: <span className="font-mono bg-zinc-100 px-1 py-0.5 rounded text-zinc-700">(Preço - Subvenção) - 20% - R$4.</span></p>
                </div>
 
-               <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 relative overflow-hidden group hover:-translate-y-2 transition-transform">
-                 <div className="absolute top-0 right-0 w-16 h-16 bg-green-50 rounded-bl-full -mr-2 -mt-2 transition-transform group-hover:scale-150"></div>
-                 <LineChart size={32} className="text-green-500 mb-6 relative z-10" />
-                 <h3 className="text-xl font-black text-gray-900 mb-2">3. Recuperação & DRE</h3>
-                 <p className="text-gray-500 text-sm">Aponte fretes cobrados indevidamente, exija o repasse de pedidos atrasados e calcule seu lucro líquido real.</p>
+               <div className="bg-white p-6 rounded-xl border border-zinc-200 shadow-sm">
+                 <LineChart size={20} className="text-zinc-900 mb-4" />
+                 <h3 className="text-sm font-semibold text-zinc-900 mb-1">3. Business Intelligence</h3>
+                 <p className="text-xs text-zinc-500 leading-relaxed">Geração automática de DRE, identificação de capital retido por divergências e controle de custos de SKU.</p>
                </div>
              </div>
 
-             <div className="text-center">
-               <button onClick={() => setActiveTab('upload')} className="bg-[#111827] text-[#F1C40F] px-10 py-5 rounded-2xl font-black text-lg hover:shadow-2xl hover:scale-105 transition-all flex items-center justify-center gap-3 mx-auto">
-                 <UploadCloud size={24}/> COMEÇAR PRIMEIRA AUDITORIA
-               </button>
-             </div>
+             <button onClick={() => setActiveTab('upload')} className="bg-zinc-900 text-white px-8 py-3 rounded-lg font-medium text-sm hover:bg-zinc-800 shadow-sm transition-colors flex items-center gap-2">
+               <UploadCloud size={18}/> Iniciar Workspace de Auditoria
+             </button>
            </div>
         )}
 
         {/* TAB 2: UPLOAD */}
         {activeTab === 'upload' && (
-          <div className="w-full animate-fade-in max-w-5xl mx-auto pb-10">
-             <SecaoHeader titulo="Processar Relatórios" icone={UploadCloud} descricao="Suba os relatórios oficiais da UPSeller (para base logística e IDs) e da Kwai (para valores financeiros). Nossa IA fará o resto." />
+          <div className="w-full animate-fade-in max-w-4xl mx-auto pb-10">
+             <SecaoHeader titulo="Data Ingestion" descricao="Faça o upload dos arquivos originais em formato Excel (.xlsx ou .xls) exportados diretamente das plataformas." />
              
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-              <label className="bg-white border-2 border-dashed border-gray-300 rounded-3xl p-12 flex flex-col items-center justify-center cursor-pointer hover:border-[#F1C40F] hover:bg-yellow-50/30 transition-all group">
-                <div className="bg-gray-50 p-4 rounded-full mb-6 group-hover:bg-[#F1C40F]/20 transition-colors"><Package size={40} className="text-gray-400 group-hover:text-yellow-600"/></div>
-                <h3 className="font-black text-xl text-gray-800 mb-2">1. Relatório UPSELLER</h3>
-                <p className="text-gray-500 text-sm mb-6 text-center">{upsellerData.length > 0 ? <span className="text-green-600 font-bold bg-green-50 px-3 py-1 rounded-full">{upsellerData.length} registros prontos</span> : 'Selecione o arquivo Excel / CSV'}</p>
-                <div className="bg-gray-100 text-gray-600 px-6 py-2 rounded-xl font-bold text-sm group-hover:bg-white group-hover:shadow-sm">Procurar Arquivo</div>
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+              <label className="bg-white border border-dashed border-zinc-300 rounded-xl p-8 flex flex-col items-center justify-center cursor-pointer hover:border-zinc-400 hover:bg-zinc-50 transition-all">
+                <div className="bg-zinc-100 p-3 rounded-lg mb-4 text-zinc-600"><Package size={24}/></div>
+                <h3 className="font-semibold text-sm text-zinc-900 mb-1">Base Logística (UPSeller)</h3>
+                <p className="text-xs text-zinc-500 mb-4 text-center h-8">
+                  {upsellerData.length > 0 ? <span className="inline-flex items-center px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 font-medium ring-1 ring-inset ring-emerald-600/20">{upsellerData.length} registros processados</span> : 'Exportação geral de pedidos'}
+                </p>
+                <div className="text-xs font-medium text-zinc-700 bg-white border border-zinc-200 px-4 py-2 rounded-md shadow-sm">Selecionar Arquivo</div>
                 <input type="file" className="hidden" onChange={(e) => lerPlanilha(e, setUpsellerData)} />
               </label>
 
-              <label className="bg-white border-2 border-dashed border-gray-300 rounded-3xl p-12 flex flex-col items-center justify-center cursor-pointer hover:border-[#F1C40F] hover:bg-yellow-50/30 transition-all group">
-                <div className="bg-gray-50 p-4 rounded-full mb-6 group-hover:bg-[#F1C40F]/20 transition-colors"><FileSpreadsheet size={40} className="text-gray-400 group-hover:text-yellow-600"/></div>
-                <h3 className="font-black text-xl text-gray-800 mb-2">2. Extrato Financeiro KWAI</h3>
-                <p className="text-gray-500 text-sm mb-6 text-center">{kwaiData.length > 0 ? <span className="text-green-600 font-bold bg-green-50 px-3 py-1 rounded-full">{kwaiData.length} registros prontos</span> : 'Selecione o arquivo Excel / CSV'}</p>
-                <div className="bg-gray-100 text-gray-600 px-6 py-2 rounded-xl font-bold text-sm group-hover:bg-white group-hover:shadow-sm">Procurar Arquivo</div>
+              <label className="bg-white border border-dashed border-zinc-300 rounded-xl p-8 flex flex-col items-center justify-center cursor-pointer hover:border-zinc-400 hover:bg-zinc-50 transition-all">
+                <div className="bg-zinc-100 p-3 rounded-lg mb-4 text-zinc-600"><FileSpreadsheet size={24}/></div>
+                <h3 className="font-semibold text-sm text-zinc-900 mb-1">Extrato Financeiro (Kwai)</h3>
+                <p className="text-xs text-zinc-500 mb-4 text-center h-8">
+                  {kwaiData.length > 0 ? <span className="inline-flex items-center px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 font-medium ring-1 ring-inset ring-emerald-600/20">{kwaiData.length} registros processados</span> : 'Relatório de liquidação/saques'}
+                </p>
+                <div className="text-xs font-medium text-zinc-700 bg-white border border-zinc-200 px-4 py-2 rounded-md shadow-sm">Selecionar Arquivo</div>
                 <input type="file" className="hidden" onChange={(e) => lerPlanilha(e, setKwaiData)} />
               </label>
             </div>
             
-            <button onClick={executarConciliacao} disabled={isSyncing} className={`w-full py-6 rounded-2xl shadow-xl font-black text-xl uppercase tracking-widest flex items-center justify-center gap-3 transition-all ${isSyncing ? 'bg-gray-800 text-gray-400 cursor-not-allowed' : 'bg-gradient-to-r from-[#111827] to-gray-800 text-[#F1C40F] hover:shadow-2xl hover:-translate-y-1'}`}>
-              {isSyncing ? <><Loader2 className="animate-spin" size={24}/> Auditando milhares de linhas...</> : <><ShieldCheck size={28}/> Executar Auditoria Forense</>}
+            <button onClick={executarConciliacao} disabled={isSyncing} className={`w-full py-4 rounded-xl shadow-sm font-semibold text-sm flex items-center justify-center gap-2 transition-all border ${isSyncing ? 'bg-zinc-100 text-zinc-400 border-zinc-200 cursor-not-allowed' : 'bg-zinc-900 text-white border-zinc-900 hover:bg-zinc-800'}`}>
+              {isSyncing ? <><Loader2 className="animate-spin" size={18}/> Processando reconciliação...</> : <><Database size={18}/> Executar Algoritmo de Auditoria</>}
             </button>
           </div>
         )}
 
         {/* TAB 3: AGUARDANDO NO PRAZO */}
         {activeTab === 'aguardando' && (
-          <div className="w-full animate-fade-in pb-10">
-            <SecaoHeader titulo="Pedidos no Prazo" icone={Hourglass} descricao="Fique tranquilo. Estes pedidos foram enviados recentemente e ainda estão dentro do ciclo logístico de 22 dias da plataforma para serem pagos." />
+          <div className="w-full animate-fade-in max-w-5xl mx-auto pb-10">
+            <SecaoHeader titulo="Pipeline Logístico (No Prazo)" descricao="Pedidos que constam na base logística, mas ainda estão dentro da janela de liquidação padrão da plataforma." />
             
-            {!resultados ? ( <div className="bg-white rounded-3xl p-16 text-center border border-gray-100 text-gray-400 font-medium">Faça uma auditoria primeiro para visualizar.</div> ) : (
-              <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden w-full">
-                <div className="p-4 border-b border-gray-100 bg-gray-50 flex justify-end gap-2">
+            {!resultados ? ( <div className="bg-white border border-zinc-200 rounded-xl p-12 text-center text-sm text-zinc-500">Workspace não inicializado.</div> ) : (
+              <div className="bg-white rounded-xl shadow-sm border border-zinc-200 overflow-hidden w-full">
+                <div className="p-3 border-b border-zinc-100 bg-zinc-50/50 flex justify-end gap-2">
                    {resultados.noPrazo.length > 0 && (
                      <>
-                        <button onClick={() => exportarExcel(resultados.noPrazo, "No_Prazo")} className="bg-white text-green-700 border border-gray-200 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 hover:bg-green-50 transition-colors"><Download size={16}/> Baixar Excel</button>
-                        <button onClick={() => exportarPDF(resultados.noPrazo, "Pedidos Aguardando Prazo Logistico", "No_Prazo")} className="bg-white text-red-700 border border-gray-200 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 hover:bg-red-50 transition-colors"><FileJson size={16}/> Gerar PDF</button>
+                        <button onClick={() => exportarExcel(resultados.noPrazo, "No_Prazo")} className="bg-white text-zinc-700 border border-zinc-200 px-3 py-1.5 rounded-md font-medium text-xs flex items-center gap-2 hover:bg-zinc-50 shadow-sm transition-colors"><Download size={14}/> CSV / Excel</button>
+                        <button onClick={() => exportarPDF(resultados.noPrazo, "Pedidos no Pipeline de Liquidação", "No_Prazo")} className="bg-white text-zinc-700 border border-zinc-200 px-3 py-1.5 rounded-md font-medium text-xs flex items-center gap-2 hover:bg-zinc-50 shadow-sm transition-colors"><FileJson size={14}/> PDF Document</button>
                      </>
                    )}
                 </div>
                 <div className="max-h-[60vh] overflow-y-auto">
-                  <table className="w-full text-left">
-                    <thead className="bg-white text-gray-400 text-xs uppercase font-black sticky top-0 shadow-sm">
-                      <tr><th className="p-5">ID do Pedido</th><th className="p-5">Vencimento Máximo</th><th className="p-5 text-right">Valor Estimado</th></tr>
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-zinc-50/50 text-zinc-500 font-medium sticky top-0 border-b border-zinc-200">
+                      <tr><th className="p-4 font-medium">Tracking ID</th><th className="p-4 font-medium">Forecast de Vencimento</th><th className="p-4 text-right font-medium">Estimativa Bruta</th></tr>
                     </thead>
-                    <tbody className="text-sm">
+                    <tbody className="divide-y divide-zinc-100">
                       {resultados.noPrazo.map((item: any, idx: number) => (
-                        <tr key={idx} className="border-b border-gray-50 hover:bg-gray-50/80 transition-colors">
-                          <td className="p-5 font-mono font-bold text-gray-700">{item["ID do Pedido"]}</td>
-                          <td className="p-5 text-yellow-600 font-bold bg-yellow-50/30 rounded-lg inline-block mt-3">{item["Vencimento Esperado"]}</td>
-                          <td className="p-5 text-right font-black text-gray-800">R$ {item["Valor Estimado (R$)"].toFixed(2)}</td>
+                        <tr key={idx} className="hover:bg-zinc-50 transition-colors">
+                          <td className="p-4 font-mono text-xs text-zinc-900">{item["ID do Pedido"]}</td>
+                          <td className="p-4"><span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-zinc-100 text-zinc-700">{item["Vencimento Esperado"]}</span></td>
+                          <td className="p-4 text-right text-zinc-900">R$ {item["Valor Estimado (R$)"].toFixed(2)}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                  {resultados.noPrazo.length === 0 && <p className="text-gray-400 text-center py-16 font-medium">Nenhum pedido no prazo encontrado.</p>}
+                  {resultados.noPrazo.length === 0 && <p className="text-zinc-500 text-sm text-center py-12">Sem dados em trânsito no momento.</p>}
                 </div>
               </div>
             )}
@@ -555,76 +558,76 @@ export default function Dashboard({ session }: any) {
 
         {/* TAB 4: DIVERGÊNCIAS E ATRASOS */}
         {activeTab === 'divergencias' && (
-          <div className="w-full animate-fade-in pb-10">
-            <SecaoHeader titulo="Divergências & Atrasos" icone={AlertTriangle} descricao="Onde recuperamos o seu dinheiro. Exporte as planilhas abaixo em Excel ou PDF e anexe diretamente nos chamados do suporte da Kwai." />
+          <div className="w-full animate-fade-in max-w-6xl mx-auto pb-10">
+            <SecaoHeader titulo="Painel de Discrepâncias" descricao="Registros onde o algoritmo detectou anomalias entre as regras comerciais aplicadas e a liquidação efetiva da plataforma." />
             
-            {!resultados ? ( <div className="bg-white rounded-3xl p-16 text-center border border-gray-100 text-gray-400 font-medium">Faça uma auditoria primeiro para visualizar.</div> ) : (
-              <div className="grid grid-cols-1 gap-8 w-full">
+            {!resultados ? ( <div className="bg-white border border-zinc-200 rounded-xl p-12 text-center text-sm text-zinc-500">Workspace não inicializado.</div> ) : (
+              <div className="grid grid-cols-1 gap-6 w-full">
                 
-                <div className="bg-white border border-gray-100 rounded-3xl shadow-sm flex flex-col h-[60vh] overflow-hidden w-full relative">
-                  <div className="absolute top-0 left-0 w-2 h-full bg-red-500"></div>
-                  <div className="bg-white p-6 border-b border-gray-100 flex justify-between items-center ml-2">
+                {/* DIVERGÊNCIAS FINANCEIRAS */}
+                <div className="bg-white border border-zinc-200 rounded-xl shadow-sm flex flex-col min-h-[400px] overflow-hidden w-full">
+                  <div className="p-4 border-b border-zinc-100 bg-zinc-50/50 flex justify-between items-center">
                     <div>
-                      <h3 className="font-black text-gray-900 text-xl flex items-center gap-2">Divergências Financeiras</h3>
-                      <p className="text-gray-500 text-sm mt-1">{resultados.divergencias.length} pedidos com diferenças indevidas no repasse.</p>
+                      <h3 className="font-semibold text-sm text-zinc-900 flex items-center gap-2"><AlertTriangle size={16} className="text-red-500"/> Anomalias Financeiras</h3>
+                      <p className="text-xs text-zinc-500 mt-0.5">{resultados.divergencias.length} registros com falha no repasse esperado.</p>
                     </div>
                     {resultados.divergencias.length > 0 && (
                       <div className="flex gap-2">
-                         <button onClick={() => exportarExcel(resultados.divergencias, "Divergencias_Financeiras")} className="bg-green-50 text-green-700 border border-green-100 hover:bg-green-100 px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 transition-colors"><Download size={16}/> Excel</button>
-                         <button onClick={() => exportarPDF(resultados.divergencias, "Dossie de Divergencias Financeiras e Frete", "Divergencias_Financeiras")} className="bg-red-50 text-red-700 border border-red-100 hover:bg-red-100 px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 transition-colors"><FileJson size={16}/> PDF</button>
+                         <button onClick={() => exportarExcel(resultados.divergencias, "Divergencias_Financeiras")} className="bg-white text-zinc-700 border border-zinc-200 px-3 py-1.5 rounded-md font-medium text-xs flex items-center gap-2 hover:bg-zinc-50 shadow-sm transition-colors"><Download size={14}/> Dados (Excel)</button>
+                         <button onClick={() => exportarPDF(resultados.divergencias, "Relatório de Anomalias Financeiras", "Divergencias_Financeiras")} className="bg-white text-zinc-700 border border-zinc-200 px-3 py-1.5 rounded-md font-medium text-xs flex items-center gap-2 hover:bg-zinc-50 shadow-sm transition-colors"><FileJson size={14}/> Dossiê PDF</button>
                       </div>
                     )}
                   </div>
-                  <div className="overflow-y-auto flex-1 ml-2">
-                    <table className="w-full text-left">
-                      <thead className="bg-gray-50 text-gray-500 text-[10px] uppercase font-black sticky top-0 shadow-sm">
-                        <tr><th className="p-4">ID do Pedido</th><th className="p-4">Análise Forense (Motivo)</th><th className="p-4 text-right">Repasse Correto</th><th className="p-4 text-right">Repasse Realizado</th><th className="p-4 text-right text-red-600">Falta Pagar</th></tr>
+                  <div className="overflow-y-auto flex-1">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-zinc-50/50 text-zinc-500 sticky top-0 border-b border-zinc-200">
+                        <tr><th className="p-4 font-medium">Tracking ID</th><th className="p-4 font-medium">Diagnóstico Algorítmico</th><th className="p-4 text-right font-medium">Modelo Esperado</th><th className="p-4 text-right font-medium">Liquidação Efetiva</th><th className="p-4 text-right font-medium text-zinc-900">Gap Identificado</th></tr>
                       </thead>
-                      <tbody className="text-sm">
+                      <tbody className="divide-y divide-zinc-100">
                         {resultados.divergencias.map((item: any, idx: number) => (
-                          <tr key={idx} className="border-b border-gray-50 hover:bg-red-50/30 transition-colors">
-                            <td className="p-4 font-mono font-bold text-gray-800">{item["ID do Pedido"]}</td>
-                            <td className="p-4"><span className="bg-red-100 text-red-700 px-2 py-1 rounded-md text-xs font-bold">{item["Motivo"]}</span></td>
-                            <td className="p-4 text-right font-medium text-gray-500">R$ {item["Repasse Esperado (R$)"]?.toFixed(2) || '0.00'}</td>
-                            <td className="p-4 text-right font-medium text-gray-500">R$ {item["Receita Kwai (R$)"]?.toFixed(2) || '0.00'}</td>
-                            <td className="p-4 text-right font-black text-red-600">R$ {item["Diferença (R$)"]?.toFixed(2)}</td>
+                          <tr key={idx} className="hover:bg-zinc-50 transition-colors">
+                            <td className="p-4 font-mono text-xs text-zinc-900">{item["ID do Pedido"]}</td>
+                            <td className="p-4"><span className="inline-flex items-center px-2 py-1 rounded-md text-[10px] font-semibold tracking-wide uppercase bg-red-50 text-red-700 ring-1 ring-inset ring-red-600/10">{item["STATUS"]}</span></td>
+                            <td className="p-4 text-right text-zinc-500">R$ {item["Repasse Esperado (R$)"]?.toFixed(2) || '0.00'}</td>
+                            <td className="p-4 text-right text-zinc-500">R$ {item["Receita Kwai (R$)"]?.toFixed(2) || '0.00'}</td>
+                            <td className="p-4 text-right font-medium text-red-600">R$ {item["Diferença (R$)"]?.toFixed(2)}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
-                    {resultados.divergencias.length === 0 && <div className="p-16 text-center text-gray-400 font-bold">Nenhuma divergência encontrada.</div>}
+                    {resultados.divergencias.length === 0 && <div className="p-12 text-center text-sm text-zinc-500">Nenhuma anomalia crítica detectada.</div>}
                   </div>
                 </div>
 
-                <div className="bg-white border border-gray-100 rounded-3xl shadow-sm flex flex-col h-[50vh] overflow-hidden w-full relative">
-                  <div className="absolute top-0 left-0 w-2 h-full bg-orange-500"></div>
-                  <div className="bg-white p-6 border-b border-gray-100 flex justify-between items-center ml-2">
+                {/* ATRASADOS */}
+                <div className="bg-white border border-zinc-200 rounded-xl shadow-sm flex flex-col min-h-[300px] overflow-hidden w-full">
+                  <div className="p-4 border-b border-zinc-100 bg-zinc-50/50 flex justify-between items-center">
                     <div>
-                      <h3 className="font-black text-gray-900 text-xl flex items-center gap-2">Repasses Atrasados</h3>
-                      <p className="text-gray-500 text-sm mt-1">{resultados.atrasados.length} pedidos já passaram do prazo de 22 dias.</p>
+                      <h3 className="font-semibold text-sm text-zinc-900 flex items-center gap-2"><Hourglass size={16} className="text-amber-500"/> Violações de SLA Logístico</h3>
+                      <p className="text-xs text-zinc-500 mt-0.5">{resultados.atrasados.length} pedidos pendentes fora da janela padrão.</p>
                     </div>
                     {resultados.atrasados.length > 0 && (
                        <div className="flex gap-2">
-                          <button onClick={() => exportarExcel(resultados.atrasados, "Repasses_Atrasados")} className="bg-green-50 text-green-700 border border-green-100 hover:bg-green-100 px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 transition-colors"><Download size={16}/> Excel</button>
-                          <button onClick={() => exportarPDF(resultados.atrasados, "Dossie de Repasses Atrasados", "Repasses_Atrasados")} className="bg-red-50 text-red-700 border border-red-100 hover:bg-red-100 px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 transition-colors"><FileJson size={16}/> PDF</button>
+                          <button onClick={() => exportarExcel(resultados.atrasados, "Atrasados")} className="bg-white text-zinc-700 border border-zinc-200 px-3 py-1.5 rounded-md font-medium text-xs flex items-center gap-2 hover:bg-zinc-50 shadow-sm transition-colors"><Download size={14}/> Dados (Excel)</button>
+                          <button onClick={() => exportarPDF(resultados.atrasados, "Dossiê de Violações de SLA", "Atrasados")} className="bg-white text-zinc-700 border border-zinc-200 px-3 py-1.5 rounded-md font-medium text-xs flex items-center gap-2 hover:bg-zinc-50 shadow-sm transition-colors"><FileJson size={14}/> Dossiê PDF</button>
                        </div>
                     )}
                   </div>
-                  <div className="overflow-y-auto flex-1 ml-2">
-                    <table className="w-full text-left">
-                      <thead className="bg-gray-50 text-gray-500 text-[10px] uppercase font-black sticky top-0 shadow-sm">
-                        <tr><th className="p-5">ID do Pedido</th><th className="p-5 text-right">Repasse Atrasado Estimado</th></tr>
+                  <div className="overflow-y-auto flex-1">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-zinc-50/50 text-zinc-500 sticky top-0 border-b border-zinc-200">
+                        <tr><th className="p-4 font-medium">Tracking ID</th><th className="p-4 text-right font-medium">Exposure / Gap Estimado</th></tr>
                       </thead>
-                      <tbody className="text-sm">
+                      <tbody className="divide-y divide-zinc-100">
                         {resultados.atrasados.map((item: any, idx: number) => (
-                          <tr key={idx} className="border-b border-gray-50 hover:bg-orange-50/30 transition-colors">
-                            <td className="p-5 font-mono font-bold text-gray-800">{item["ID do Pedido"]}</td>
-                            <td className="p-5 text-right font-black text-orange-600">R$ {item["Repasse Atrasado Estimado (R$)"].toFixed(2)}</td>
+                          <tr key={idx} className="hover:bg-zinc-50 transition-colors">
+                            <td className="p-4 font-mono text-xs text-zinc-900">{item["ID do Pedido"]}</td>
+                            <td className="p-4 text-right font-medium text-amber-600">R$ {item["Repasse Atrasado Estimado (R$)"].toFixed(2)}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
-                    {resultados.atrasados.length === 0 && <div className="p-16 text-center text-gray-400 font-bold">Nenhum repasse atrasado.</div>}
+                    {resultados.atrasados.length === 0 && <div className="p-12 text-center text-sm text-zinc-500">Nenhum backlog fora da janela logística.</div>}
                   </div>
                 </div>
 
@@ -635,35 +638,35 @@ export default function Dashboard({ session }: any) {
 
         {/* TAB 5: MALHA FINA */}
         {activeTab === 'malhafina' && (
-          <div className="w-full animate-fade-in pb-10">
-            <SecaoHeader titulo="Malha Fina (Cancelados)" icone={Ban} descricao="Transparência total. Separamos e isolamos todos os pedidos marcados como Cancelados ou Devolvidos para não inflar artificialmente o seu painel de vendas brutas. Você pode conferir cada um deles aqui." />
+          <div className="w-full animate-fade-in max-w-5xl mx-auto pb-10">
+            <SecaoHeader titulo="Data Quarantine (Cancelados)" descricao="Registros segregados para evitar distorção nas métricas de performance comercial (Pós-venda e Cancelamentos)." />
             
-            {!resultados ? ( <div className="bg-white rounded-3xl p-16 text-center border border-gray-100 text-gray-400 font-medium">Faça uma auditoria primeiro para visualizar.</div> ) : (
-              <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden w-full max-h-[70vh]">
-                <div className="p-4 border-b border-gray-100 bg-gray-50 flex justify-end gap-2">
+            {!resultados ? ( <div className="bg-white border border-zinc-200 rounded-xl p-12 text-center text-sm text-zinc-500">Workspace não inicializado.</div> ) : (
+              <div className="bg-white rounded-xl shadow-sm border border-zinc-200 overflow-hidden w-full">
+                <div className="p-3 border-b border-zinc-100 bg-zinc-50/50 flex justify-end gap-2">
                   {resultados.cancelados.length > 0 && (
                      <>
-                        <button onClick={() => exportarExcel(resultados.cancelados, "Cancelados_Isolados")} className="bg-white text-green-700 border border-gray-200 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 hover:bg-green-50 transition-colors"><Download size={16}/> Baixar Excel</button>
-                        <button onClick={() => exportarPDF(resultados.cancelados, "Relatorio de Pedidos Cancelados ou Devolvidos", "Cancelados_Isolados")} className="bg-white text-red-700 border border-gray-200 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 hover:bg-red-50 transition-colors"><FileJson size={16}/> Gerar PDF</button>
+                        <button onClick={() => exportarExcel(resultados.cancelados, "Cancelados_Quarentena")} className="bg-white text-zinc-700 border border-zinc-200 px-3 py-1.5 rounded-md font-medium text-xs flex items-center gap-2 hover:bg-zinc-50 shadow-sm transition-colors"><Download size={14}/> CSV / Excel</button>
+                        <button onClick={() => exportarPDF(resultados.cancelados, "Log de Registros em Quarentena", "Cancelados_Quarentena")} className="bg-white text-zinc-700 border border-zinc-200 px-3 py-1.5 rounded-md font-medium text-xs flex items-center gap-2 hover:bg-zinc-50 shadow-sm transition-colors"><FileJson size={14}/> PDF Document</button>
                      </>
                    )}
                 </div>
-                <div className="overflow-y-auto h-full p-0">
-                  <table className="w-full text-left border-collapse">
-                    <thead className="bg-white text-gray-400 text-[10px] uppercase font-black sticky top-0 shadow-sm">
-                      <tr><th className="p-5">ID do Pedido</th><th className="p-5">Status Upseller</th><th className="p-5 text-right">Valor Original de Referência</th></tr>
+                <div className="max-h-[60vh] overflow-y-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-zinc-50/50 text-zinc-500 font-medium sticky top-0 border-b border-zinc-200">
+                      <tr><th className="p-4 font-medium">Tracking ID</th><th className="p-4 font-medium">Flag do Sistema</th><th className="p-4 text-right font-medium">Valor de Face</th></tr>
                     </thead>
-                    <tbody className="text-sm">
+                    <tbody className="divide-y divide-zinc-100">
                       {resultados.cancelados.map((item: any, idx: number) => (
-                        <tr key={idx} className="border-b border-gray-50 hover:bg-gray-50/80 transition-colors">
-                          <td className="p-5 font-mono font-bold text-gray-500">{item["ID do Pedido"]}</td>
-                          <td className="p-5"><span className="bg-gray-100 text-gray-600 px-3 py-1 rounded-full text-xs font-bold border border-gray-200">{item["Status"]}</span></td>
-                          <td className="p-5 text-right font-black text-gray-400 line-through">R$ {item["Valor Registrado"] ? item["Valor Registrado"].toFixed(2) : item["Valor de Referência (R$)"].toFixed(2)}</td>
+                        <tr key={idx} className="hover:bg-zinc-50 transition-colors">
+                          <td className="p-4 font-mono text-xs text-zinc-900">{item["ID do Pedido"]}</td>
+                          <td className="p-4"><span className="inline-flex items-center px-2 py-1 rounded-md text-[10px] font-semibold tracking-wide uppercase bg-zinc-100 text-zinc-600 ring-1 ring-inset ring-zinc-500/10">EXCLUÍDO</span></td>
+                          <td className="p-4 text-right text-zinc-400">R$ {item["Valor Registrado"] ? item["Valor Registrado"].toFixed(2) : item["Valor de Referência (R$)"].toFixed(2)}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                  {resultados.cancelados.length === 0 && <p className="text-gray-400 text-center py-16 font-medium">Nenhum pedido cancelado encontrado.</p>}
+                  {resultados.cancelados.length === 0 && <p className="text-zinc-500 text-sm text-center py-12">Nenhum evento de quarentena registrado.</p>}
                 </div>
               </div>
             )}
@@ -672,30 +675,41 @@ export default function Dashboard({ session }: any) {
 
         {/* TAB 6: PRODUTOS */}
         {activeTab === 'produtos' && (
-          <div className="w-full animate-fade-in pb-10">
-            <SecaoHeader titulo="Inteligência de Produtos" icone={Package} descricao="Cadastre os custos de fabricação/aquisição para descobrir sua lucratividade real. O sistema extrai e salva os SKUs automaticamente ao auditar relatórios." />
+          <div className="w-full animate-fade-in max-w-6xl mx-auto pb-10">
+            <div className="flex justify-between items-end mb-8 border-b border-zinc-200 pb-5">
+              <div>
+                 <h2 className="text-2xl font-semibold tracking-tight text-zinc-900">Gerenciamento de SKUs</h2>
+                 <p className="text-sm text-zinc-500 mt-1">Atribuição de custo de inventário (COGS) para cálculo real de lucratividade.</p>
+              </div>
+              <button onClick={carregarProdutos} className="bg-white text-zinc-700 border border-zinc-200 px-4 py-2 rounded-md font-medium text-xs hover:bg-zinc-50 shadow-sm transition-colors">Sync Database</button>
+            </div>
             
-            <div className="bg-white border border-gray-100 rounded-3xl shadow-sm overflow-hidden">
-               <div className="p-4 border-b border-gray-100 bg-gray-50 flex justify-end">
-                 <button onClick={carregarProdutos} className="bg-white text-gray-700 border border-gray-200 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 hover:bg-gray-100 transition-colors">Atualizar Banco</button>
-               </div>
-               
+            <div className="bg-white border border-zinc-200 rounded-xl shadow-sm overflow-hidden">
                {meusProdutos.length === 0 ? (
-                 <div className="p-16 text-center text-gray-400 font-medium">Nenhum produto cadastrado no banco. Suba uma planilha na aba "Nova Auditoria".</div>
+                 <div className="p-16 text-center text-sm text-zinc-500">Catálogo vazio. O sistema populará isso automaticamente via Data Ingestion.</div>
                ) : (
-                 <div className="max-h-[60vh] overflow-y-auto p-0">
-                   <table className="w-full text-left">
-                     <thead className="bg-white text-gray-400 text-[10px] uppercase font-black sticky top-0 shadow-sm">
-                       <tr><th className="p-5">Cód. SKU</th><th className="p-5 w-1/3">Nome do Produto</th><th className="p-5">Custo Unitário (R$)</th><th className="p-5">Agrupar Vendas (SKU Master)</th><th className="p-5">Ação</th></tr>
+                 <div className="max-h-[60vh] overflow-y-auto">
+                   <table className="w-full text-left text-sm">
+                     <thead className="bg-zinc-50/50 text-zinc-500 font-medium sticky top-0 border-b border-zinc-200">
+                       <tr><th className="p-4">SKU / Identifier</th><th className="p-4 w-1/3">Item Descriptor</th><th className="p-4">Unit Cost (COGS)</th><th className="p-4">SKU Consolidation</th><th className="p-4">Ação</th></tr>
                      </thead>
-                     <tbody className="text-sm">
+                     <tbody className="divide-y divide-zinc-100">
                        {meusProdutos.map((prod) => (
-                         <tr key={prod.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                           <td className="p-5 font-mono font-bold text-gray-800 bg-gray-50/50">{prod.sku}</td>
-                           <td className="p-5 text-gray-600 truncate max-w-xs font-medium" title={prod.nome}>{prod.nome}</td>
-                           <td className="p-5"><input type="number" step="0.01" defaultValue={prod.custo} id={`custo-${prod.sku}`} className="w-32 bg-white border-2 border-gray-200 rounded-xl p-3 focus:border-[#10b981] focus:ring-4 focus:ring-green-50 outline-none font-bold text-gray-800 transition-all" /></td>
-                           <td className="p-5"><input type="text" placeholder="Ex: SKU-BASE" defaultValue={prod.sku_master || ''} id={`master-${prod.sku}`} className="w-40 bg-white border-2 border-gray-200 rounded-xl p-3 focus:border-[#10b981] focus:ring-4 focus:ring-green-50 outline-none font-bold text-gray-800 transition-all text-xs" /></td>
-                           <td className="p-5"><button onClick={() => { const custo = (document.getElementById(`custo-${prod.sku}`) as HTMLInputElement).value; const master = (document.getElementById(`master-${prod.sku}`) as HTMLInputElement).value; atualizarProduto(prod.sku, Number(custo), master); }} className="bg-[#10b981] text-white p-3 rounded-xl hover:bg-emerald-600 hover:shadow-lg hover:-translate-y-1 transition-all"><Save size={18}/></button></td>
+                         <tr key={prod.id} className="hover:bg-zinc-50 transition-colors">
+                           <td className="p-4 font-mono text-xs text-zinc-500">{prod.sku}</td>
+                           <td className="p-4 text-zinc-900 truncate max-w-xs" title={prod.nome}>{prod.nome}</td>
+                           <td className="p-4">
+                             <div className="relative">
+                               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 text-xs font-medium">R$</span>
+                               <input type="number" step="0.01" defaultValue={prod.custo} id={`custo-${prod.sku}`} className="w-28 bg-white border border-zinc-200 rounded-md py-1.5 pl-8 pr-2 text-sm text-zinc-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all shadow-sm" />
+                             </div>
+                           </td>
+                           <td className="p-4">
+                             <input type="text" placeholder="SKU-PARENT" defaultValue={prod.sku_master || ''} id={`master-${prod.sku}`} className="w-32 bg-white border border-zinc-200 rounded-md px-3 py-1.5 text-xs text-zinc-900 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all shadow-sm font-mono placeholder:text-zinc-300" />
+                           </td>
+                           <td className="p-4">
+                             <button onClick={() => { const custo = (document.getElementById(`custo-${prod.sku}`) as HTMLInputElement).value; const master = (document.getElementById(`master-${prod.sku}`) as HTMLInputElement).value; atualizarProduto(prod.sku, Number(custo), master); }} className="bg-zinc-900 text-white p-1.5 rounded-md hover:bg-zinc-800 transition-all shadow-sm"><Save size={16}/></button>
+                           </td>
                          </tr>
                        ))}
                      </tbody>
@@ -708,29 +722,26 @@ export default function Dashboard({ session }: any) {
 
         {/* TAB 7: LUCRATIVIDADE */}
         {activeTab === 'lucro' && (
-          <div className="w-full animate-fade-in pb-10">
-            <SecaoHeader titulo="DRE & Lucratividade Real" icone={LineChart} descricao="A verdade crua sobre o seu negócio. Cruzamos os repasses confirmados, removemos as taxas e divergências, e subtraímos o custo dos produtos para revelar o que sobrou no seu bolso." />
+          <div className="w-full animate-fade-in max-w-5xl mx-auto pb-10">
+            <SecaoHeader titulo="Statements (P&L)" descricao="Demonstrativo de Resultado com base nas regras de auditoria e COGS atribuídos." />
             
-            {!resultados ? ( <div className="bg-white rounded-3xl p-16 text-center border border-gray-100 text-gray-400 font-medium">Faça uma auditoria primeiro para gerar o DRE.</div> ) : (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {!resultados ? ( <div className="bg-white border border-zinc-200 rounded-xl p-12 text-center text-sm text-zinc-500">Workspace não inicializado.</div> ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 
-                <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-24 h-24 bg-gray-50 rounded-bl-full -mr-4 -mt-4"></div>
-                  <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2 relative z-10">Valor Real Vendido</p>
-                  <p className="text-4xl font-black text-gray-900 relative z-10">R$ {resultados.valorBruto.toLocaleString('pt-BR', {minimumFractionDigits:2})}</p>
+                <div className="bg-white p-6 rounded-xl border border-zinc-200 shadow-sm flex flex-col justify-center">
+                  <p className="text-xs font-medium text-zinc-500 uppercase tracking-widest mb-2">Net Sales (Valor Real)</p>
+                  <p className="text-3xl font-semibold tracking-tight text-zinc-900">R$ {resultados.valorBruto.toLocaleString('pt-BR', {minimumFractionDigits:2})}</p>
                 </div>
                 
-                <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-24 h-24 bg-orange-50 rounded-bl-full -mr-4 -mt-4"></div>
-                  <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2 relative z-10">Custo dos Produtos</p>
-                  <p className="text-4xl font-black text-orange-500 relative z-10">- R$ {resultados.custoTotal.toLocaleString('pt-BR', {minimumFractionDigits:2})}</p>
+                <div className="bg-white p-6 rounded-xl border border-zinc-200 shadow-sm flex flex-col justify-center">
+                  <p className="text-xs font-medium text-zinc-500 uppercase tracking-widest mb-2">COGS (Custos)</p>
+                  <p className="text-3xl font-semibold tracking-tight text-zinc-500">- R$ {resultados.custoTotal.toLocaleString('pt-BR', {minimumFractionDigits:2})}</p>
                 </div>
                 
-                <div className="bg-gradient-to-br from-[#10b981] to-emerald-600 p-8 rounded-3xl shadow-xl text-white relative overflow-hidden hover:scale-105 transition-transform cursor-default">
-                   <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full blur-2xl -mr-10 -mt-10"></div>
-                   <div className="absolute bottom-0 left-0 w-24 h-24 bg-black opacity-10 rounded-tr-full -ml-4 -mb-4"></div>
-                   <p className="text-xs font-black uppercase tracking-widest mb-2 opacity-90 relative z-10">Lucro Líquido no Bolso</p>
-                   <p className="text-5xl font-black relative z-10">R$ {resultados.lucroLiquido.toLocaleString('pt-BR', {minimumFractionDigits:2})}</p>
+                <div className="bg-zinc-900 p-6 rounded-xl shadow-lg flex flex-col justify-center border border-zinc-800 relative overflow-hidden">
+                   <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500 opacity-10 rounded-full blur-2xl -mr-10 -mt-10"></div>
+                   <p className="text-xs font-medium text-zinc-400 uppercase tracking-widest mb-2 relative z-10">Net Profit</p>
+                   <p className="text-4xl font-semibold tracking-tight text-emerald-400 relative z-10">R$ {resultados.lucroLiquido.toLocaleString('pt-BR', {minimumFractionDigits:2})}</p>
                 </div>
               </div>
             )}
