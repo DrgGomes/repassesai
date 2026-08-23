@@ -7,7 +7,7 @@ import {
   PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, Legend 
 } from 'recharts';
 import { 
-  LayoutDashboard, UploadCloud, Hourglass, Download, FileSpreadsheet, AlertTriangle, Loader2, Database, LogOut, FileJson, Ban, Package, LineChart, Save, Trash2, Archive, CheckCircle2, Info, Search, ShieldCheck
+  LayoutDashboard, UploadCloud, Hourglass, Download, FileSpreadsheet, AlertTriangle, Loader2, Database, LogOut, FileJson, Ban, Package, LineChart, Save, Trash2, Archive, CheckCircle2, Search, ShieldCheck
 } from 'lucide-react';
 
 export default function Dashboard({ session }: any) {
@@ -131,7 +131,7 @@ export default function Dashboard({ session }: any) {
 
   const exportarPDF = (dados: any[], titulo: string, nomeArquivo: string) => {
     if (!dados || dados.length === 0) return alert("Não há dados.");
-    const doc = new jsPDF('landscape'); // Formato paisagem para caber mais colunas
+    const doc = new jsPDF('landscape'); 
     doc.setFontSize(16);
     doc.text(`REPASSE.AI - ${titulo}`, 14, 15);
     doc.setFontSize(10);
@@ -153,7 +153,7 @@ export default function Dashboard({ session }: any) {
     const dossieAuditoria = {
       informacoes_sistema: {
         plataforma: "Repasse.AI SaaS (Auditoria Forense)",
-        regras_matematicas_aplicadas: "Valor Real = (Preço Original - Subvenção Comercial). Taxas aplicadas: 20% sobre Valor Real + R$ 4,00 por item.",
+        regras_matematicas_aplicadas: "Valor Real = (Preço Original - Subvenção Comercial). Taxas aplicadas: 20% sobre Valor Real + R$ 4,00 por item. Custo de frete do vendedor classificado como divergência.",
         data_auditoria: new Date().toISOString()
       },
       resumo_financeiro: {
@@ -285,7 +285,6 @@ export default function Dashboard({ session }: any) {
           custoTotalGeral += order.custo_pedido;
 
        } else {
-          // NOVA LÓGICA DE AUDITORIA FORENSE
           const precoOriginal = Number(extrair(kwaiRow, ['preço do produto'])) || order.valor_bruto;
           const subvencaoAbs = Math.abs(Number(extrair(kwaiRow, ['subvenção ao comércio'])) || 0);
           const freteCobradoVendedor = Math.abs(Number(extrair(kwaiRow, ['frete pago pelo vendedor'])) || 0);
@@ -366,7 +365,6 @@ export default function Dashboard({ session }: any) {
     return <div className="h-screen w-full flex items-center justify-center bg-gray-100"><Loader2 className="animate-spin text-[#F1C40F]" size={48} /></div>;
   }
 
-  // COMPONENTE DE HEADER DIDÁTICO REUTILIZÁVEL
   const SecaoHeader = ({ titulo, icone: Icon, descricao }: any) => (
     <div className="bg-gradient-to-r from-gray-900 to-gray-800 rounded-3xl p-6 mb-8 text-white shadow-lg flex items-center gap-6 relative overflow-hidden">
       <div className="absolute top-0 right-0 w-32 h-32 bg-[#F1C40F] opacity-10 rounded-full blur-3xl -mr-10 -mt-10"></div>
@@ -382,7 +380,6 @@ export default function Dashboard({ session }: any) {
 
   return (
     <div className="flex h-screen w-full bg-[#f8fafc] overflow-hidden font-sans">
-      {/* SIDEBAR COM NOVO DESIGN */}
       <div className="w-64 bg-[#111827] text-gray-300 flex-shrink-0 flex flex-col justify-between overflow-y-auto border-r border-gray-800">
         <div className="p-6">
           <div className="flex items-center gap-3 mb-10">
@@ -410,7 +407,6 @@ export default function Dashboard({ session }: any) {
 
       <div className="flex-1 h-full overflow-y-auto p-8 relative">
         
-        {/* TAB 1: VISÃO GERAL (Com Dados) */}
         {activeTab === 'dashboard' && resultados && (
           <div className="w-full animate-fade-in pb-10">
             <SecaoHeader titulo="Visão Geral Financeira" icone={LayoutDashboard} descricao="O raio-x completo do seu negócio. Acompanhe o volume real de vendas e identifique o capital retido por divergências das plataformas." />
@@ -446,7 +442,6 @@ export default function Dashboard({ session }: any) {
           </div>
         )}
         
-        {/* HOME DIDÁTICA (Sem Dados) */}
         {activeTab === 'dashboard' && !resultados && (
            <div className="w-full animate-fade-in relative max-w-5xl mx-auto">
              <div className="absolute top-0 right-0 mt-4 mr-4">
@@ -532,7 +527,7 @@ export default function Dashboard({ session }: any) {
                    {resultados.noPrazo.length > 0 && (
                      <>
                         <button onClick={() => exportarExcel(resultados.noPrazo, "No_Prazo")} className="bg-white text-green-700 border border-gray-200 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 hover:bg-green-50 transition-colors"><Download size={16}/> Baixar Excel</button>
-                        <button onClick={() => exportarPDF(resultados.noPrazo, "Pedidos Aguardando Prazo Logístico", "No_Prazo")} className="bg-white text-red-700 border border-gray-200 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 hover:bg-red-50 transition-colors"><FileJson size={16}/> Gerar PDF</button>
+                        <button onClick={() => exportarPDF(resultados.noPrazo, "Pedidos Aguardando Prazo Logistico", "No_Prazo")} className="bg-white text-red-700 border border-gray-200 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 hover:bg-red-50 transition-colors"><FileJson size={16}/> Gerar PDF</button>
                      </>
                    )}
                 </div>
@@ -566,7 +561,6 @@ export default function Dashboard({ session }: any) {
             {!resultados ? ( <div className="bg-white rounded-3xl p-16 text-center border border-gray-100 text-gray-400 font-medium">Faça uma auditoria primeiro para visualizar.</div> ) : (
               <div className="grid grid-cols-1 gap-8 w-full">
                 
-                {/* DIVERGÊNCIAS FINANCEIRAS */}
                 <div className="bg-white border border-gray-100 rounded-3xl shadow-sm flex flex-col h-[60vh] overflow-hidden w-full relative">
                   <div className="absolute top-0 left-0 w-2 h-full bg-red-500"></div>
                   <div className="bg-white p-6 border-b border-gray-100 flex justify-between items-center ml-2">
@@ -577,7 +571,7 @@ export default function Dashboard({ session }: any) {
                     {resultados.divergencias.length > 0 && (
                       <div className="flex gap-2">
                          <button onClick={() => exportarExcel(resultados.divergencias, "Divergencias_Financeiras")} className="bg-green-50 text-green-700 border border-green-100 hover:bg-green-100 px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 transition-colors"><Download size={16}/> Excel</button>
-                         <button onClick={() => exportarPDF(resultados.divergencias, "Dossiê de Divergências Financeiras e Frete", "Divergencias_Financeiras")} className="bg-red-50 text-red-700 border border-red-100 hover:bg-red-100 px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 transition-colors"><FileJson size={16}/> PDF</button>
+                         <button onClick={() => exportarPDF(resultados.divergencias, "Dossie de Divergencias Financeiras e Frete", "Divergencias_Financeiras")} className="bg-red-50 text-red-700 border border-red-100 hover:bg-red-100 px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 transition-colors"><FileJson size={16}/> PDF</button>
                       </div>
                     )}
                   </div>
@@ -602,7 +596,6 @@ export default function Dashboard({ session }: any) {
                   </div>
                 </div>
 
-                {/* ATRASADOS */}
                 <div className="bg-white border border-gray-100 rounded-3xl shadow-sm flex flex-col h-[50vh] overflow-hidden w-full relative">
                   <div className="absolute top-0 left-0 w-2 h-full bg-orange-500"></div>
                   <div className="bg-white p-6 border-b border-gray-100 flex justify-between items-center ml-2">
@@ -613,7 +606,7 @@ export default function Dashboard({ session }: any) {
                     {resultados.atrasados.length > 0 && (
                        <div className="flex gap-2">
                           <button onClick={() => exportarExcel(resultados.atrasados, "Repasses_Atrasados")} className="bg-green-50 text-green-700 border border-green-100 hover:bg-green-100 px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 transition-colors"><Download size={16}/> Excel</button>
-                          <button onClick={() => exportarPDF(resultados.atrasados, "Dossiê de Repasses Atrasados", "Repasses_Atrasados")} className="bg-red-50 text-red-700 border border-red-100 hover:bg-red-100 px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 transition-colors"><FileJson size={16}/> PDF</button>
+                          <button onClick={() => exportarPDF(resultados.atrasados, "Dossie de Repasses Atrasados", "Repasses_Atrasados")} className="bg-red-50 text-red-700 border border-red-100 hover:bg-red-100 px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 transition-colors"><FileJson size={16}/> PDF</button>
                        </div>
                     )}
                   </div>
@@ -651,7 +644,7 @@ export default function Dashboard({ session }: any) {
                   {resultados.cancelados.length > 0 && (
                      <>
                         <button onClick={() => exportarExcel(resultados.cancelados, "Cancelados_Isolados")} className="bg-white text-green-700 border border-gray-200 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 hover:bg-green-50 transition-colors"><Download size={16}/> Baixar Excel</button>
-                        <button onClick={() => exportarPDF(resultados.cancelados, "Relatório de Pedidos Cancelados ou Devolvidos", "Cancelados_Isolados")} className="bg-white text-red-700 border border-gray-200 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 hover:bg-red-50 transition-colors"><FileJson size={16}/> Gerar PDF</button>
+                        <button onClick={() => exportarPDF(resultados.cancelados, "Relatorio de Pedidos Cancelados ou Devolvidos", "Cancelados_Isolados")} className="bg-white text-red-700 border border-gray-200 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 hover:bg-red-50 transition-colors"><FileJson size={16}/> Gerar PDF</button>
                      </>
                    )}
                 </div>
