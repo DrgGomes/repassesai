@@ -5,7 +5,7 @@ import {
   PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, Legend 
 } from 'recharts';
 import { 
-  LayoutDashboard, UploadCloud, Hourglass, Download, FileSpreadsheet, AlertTriangle, Loader2, Database, LogOut, FileJson, Ban, Package, LineChart, Save
+  LayoutDashboard, UploadCloud, Hourglass, Download, FileSpreadsheet, AlertTriangle, Loader2, Database, LogOut, FileJson, Ban, Package, LineChart, Save, Trash2, Archive
 } from 'lucide-react';
 
 export default function Dashboard({ session }: any) {
@@ -36,9 +36,11 @@ export default function Dashboard({ session }: any) {
   };
 
   const carregarDashboardDoBanco = async () => {
-    // Carrega dados base do banco para visualização rápida (DRE e status gerais)
     const { data: dbOrders } = await supabase.from('pedidos_kwai').select('*').eq('user_id', session.user.id);
-    if (!dbOrders || dbOrders.length === 0) return;
+    if (!dbOrders || dbOrders.length === 0) {
+      setResultados(null);
+      return;
+    }
 
     let atrasados: any[] = [], divergencias: any[] = [], noPrazo: any[] = [], corretos: any[] = [], cancelados: any[] = [];
     let valorBruto = 0, totalRetido = 0, custoTotal = 0, lucroLiquido = 0;
@@ -53,7 +55,6 @@ export default function Dashboard({ session }: any) {
            if (order.status === 'NO_PRAZO') {
                noPrazo.push({ "ID do Pedido": order.id_pedido, "Vencimento Esperado": new Date(order.vencimento_esperado).toLocaleDateString(), "Valor Estimado (R$)": Number(order.valor_bruto) });
            } else if (order.status === 'ATRASADO') {
-               // Estimativa com base no valor bruto para itens não recebidos da Kwai ainda
                const repasseEstimado = order.valor_bruto - ((order.valor_bruto * 0.20) + ((order.qtd || 1) * 4.00));
                atrasados.push({ "ID do Pedido": order.id_pedido, "Repasse Atrasado Estimado (R$)": Number(repasseEstimado.toFixed(2)) });
                totalRetido += repasseEstimado;
@@ -84,6 +85,35 @@ export default function Dashboard({ session }: any) {
     });
   };
 
+  // --- NOVAS FUNÇÕES DE BACKUP E RESET ---
+  const exportarBackupGeral = async () => {
+    const { data: dbOrders } = await supabase.from('pedidos_kwai').select('*').eq('user_id', session.user.id);
+    if (!dbOrders || dbOrders.length === 0) return alert("Não há dados para exportar.");
+    
+    const worksheet = XLSX.utils.json_to_sheet(dbOrders);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Backup_Completo");
+    XLSX.writeFile(workbook, `Backup_RepasseAI_${new Date().toLocaleDateString().replace(/\//g, '-')}.xlsx`);
+  };
+
+  const apagarTudo = async () => {
+    const confirmacao = window.confirm("CUIDADO! Isso vai apagar TODOS os pedidos do seu banco de dados para você recomeçar do zero. Seus produtos e custos serão mantidos. Deseja continuar?");
+    if (!confirmacao) return;
+
+    setIsF5Loading(true);
+    const { error } = await supabase.from('pedidos_kwai').delete().eq('user_id', session.user.id);
+    if (error) {
+      alert("Erro ao apagar dados.");
+      setIsF5Loading(false);
+      return;
+    }
+    
+    setResultados(null);
+    alert("Sistema resetado com sucesso! Lousa em branco.");
+    setIsF5Loading(false);
+  };
+  // ----------------------------------------
+
   const lerPlanilha = (e: any, setDados: Function) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -112,7 +142,7 @@ export default function Dashboard({ session }: any) {
     const dossieAuditoria = {
       informacoes_sistema: {
         plataforma: "Repasse.AI SaaS (Auditoria Forense)",
-        regras_matematicas_aplicadas: "Valor Real = (Preço Original - Subvenção Comercial). Taxas aplicadas: 20% sobre Valor Real + R$ 4,00 por item. Custo de frete do vendedor classificado como divergência.",
+        regras_matematicas_aplicadas: "Valor Real = (Preço Original - Subvenção Comercial). Taxas aplicadas: 20% sobre Valor Real + R$ 4,00 por item.",
         data_auditoria: new Date().toISOString()
       },
       resumo_financeiro: {
@@ -155,7 +185,6 @@ export default function Dashboard({ session }: any) {
     if (upsellerData.length === 0 && kwaiData.length === 0) return alert("⚠️ Suba os arquivos.");
     setIsSyncing(true);
 
-    // 1. AUTO-CADASTRO INTELIGENTE
     const produtosExtraidos = new Map();
     upsellerData.forEach(row => {
       const sku = extrair(row, ['sku', 'especificação', 'código', 'id do produto']);
@@ -184,13 +213,12 @@ export default function Dashboard({ session }: any) {
     });
     if (maxKwaiDate.getTime() === 0) maxKwaiDate = new Date(); 
 
-    // 2. BASE LOGÍSTICA PELA UPSELLER (Lista de Presença)
     upsellerData.forEach(row => {
       const idPedido = String(extrair(row, ['nº de pedido', 'pedido', 'order id']) || '');
       if (!idPedido) return;
       
       const statusPos = extrair(row, ['pós-venda', 'cancelado', 'devolvido', 'status']);
-      const valorPedido = Number(extrair(row, ['valor do pedido', 'valor'])) || 0; // Usado apenas como referência inicial/estimativa
+      const valorPedido = Number(extrair(row, ['valor do pedido', 'valor'])) || 0; 
       const dataStr = extrair(row, ['hora de envio', 'hora do pedido', 'data']);
       const dEnvio = dataStr ? new Date(String(dataStr).replace(' ', 'T')) : new Date(0);
       const dVencimento = new Date(dEnvio.getTime() + (22 * 86400000));
@@ -208,7 +236,7 @@ export default function Dashboard({ session }: any) {
       if (!orderMap.has(idPedido)) {
         orderMap.set(idPedido, { 
           id_pedido: idPedido, 
-          valor_bruto: valorPedido, // Estimativa prévia
+          valor_bruto: valorPedido, 
           data_envio: dEnvio.toISOString(), 
           vencimento_esperado: dVencimento.toISOString(), 
           status: status, 
@@ -223,12 +251,10 @@ export default function Dashboard({ session }: any) {
       }
     });
 
-    // LISTAS AUDITORIA PERFEITA (Para popular os resultados)
     let atrasados: any[] = [], divergencias: any[] = [], noPrazo: any[] = [], corretos: any[] = [], cancelados: any[] = [];
     let valorBrutoGeral = 0, totalDiferencas = 0, custoTotalGeral = 0, lucroLiquidoGeral = 0;
 
-    // 3. AUDITORIA FINANCEIRA FORENSE (KWAI)
-    // Varremos todos os pedidos mapeados e processamos se tiver dados no extrato
+    // A NOVA LÓGICA DE AUDITORIA EXATA
     Array.from(orderMap.values()).forEach(order => {
        const kwaiRow = kwaiData.find(r => String(extrair(r, ['número do pedido', 'pedido', 'id'])) === order.id_pedido);
        
@@ -238,7 +264,6 @@ export default function Dashboard({ session }: any) {
        }
 
        if (!kwaiRow) {
-          // AINDA NÃO FOI PAGO PELA KWAI - Mantém estimativa Upseller
           const repasseEstimado = order.valor_bruto - ((order.valor_bruto * 0.20) + (order.qtd * 4.00));
           if (order.status === 'ATRASADO') {
              atrasados.push({ "ID do Pedido": order.id_pedido, "Repasse Atrasado Estimado (R$)": Number(repasseEstimado.toFixed(2)) });
@@ -246,26 +271,24 @@ export default function Dashboard({ session }: any) {
           } else {
              noPrazo.push({ "ID do Pedido": order.id_pedido, "Vencimento Esperado": new Date(order.vencimento_esperado).toLocaleDateString(), "Valor Estimado (R$)": order.valor_bruto });
           }
-          // Incrementa os globais considerando a estimativa bruta e de custo
           valorBrutoGeral += order.valor_bruto;
           custoTotalGeral += order.custo_pedido;
 
        } else {
-          // KWAI PROCESSOU! APLICA A NOVA REGRA DE OURO
+          // Lendo as gavetas certas da Kwai
           const precoOriginal = Number(extrair(kwaiRow, ['preço do produto'])) || order.valor_bruto;
           const subvencaoAbs = Math.abs(Number(extrair(kwaiRow, ['subvenção ao comércio'])) || 0);
           const freteCobradoVendedor = Math.abs(Number(extrair(kwaiRow, ['frete pago pelo vendedor'])) || 0);
           const recKwai = Number(extrair(kwaiRow, ['receita', 'repasse'])) || 0;
 
-          // Matemática Base
+          // A Matemática Perfeita
           const valorRealVenda = precoOriginal - subvencaoAbs;
           const taxa20 = valorRealVenda * 0.20;
           const taxaOp = order.qtd * 4.00;
           const repasseEsperado = valorRealVenda - taxa20 - taxaOp;
           const diferenca = repasseEsperado - recKwai;
 
-          // Atualiza registro interno para o Banco
-          order.valor_bruto = valorRealVenda; // Atualiza o Bruto para o valor real da venda
+          order.valor_bruto = valorRealVenda;
           order.receita_kwai = recKwai;
           order.lucro_pedido = recKwai - order.custo_pedido;
           
@@ -276,12 +299,12 @@ export default function Dashboard({ session }: any) {
           const baseReport = {
              "ID do Pedido": order.id_pedido,
              "Preço Original (R$)": Number(precoOriginal.toFixed(2)),
-             "Subvenção / Desconto Comercial (R$)": Number(-subvencaoAbs.toFixed(2)),
+             "Subvenção (R$)": Number(-subvencaoAbs.toFixed(2)),
              "Valor Real da Venda (R$)": Number(valorRealVenda.toFixed(2)),
              "Taxa 20% (R$)": Number(-taxa20.toFixed(2)),
              "Taxa Operacional (R$)": Number(-taxaOp.toFixed(2)),
              "Repasse Esperado (R$)": Number(repasseEsperado.toFixed(2)),
-             "Receita Kwai Registrada (R$)": Number(recKwai.toFixed(2)),
+             "Receita Kwai (R$)": Number(recKwai.toFixed(2)),
              "Diferença (R$)": Number(diferenca.toFixed(2))
           };
 
@@ -295,10 +318,10 @@ export default function Dashboard({ session }: any) {
              
              if (freteCobradoVendedor > 0) {
                  order.status = "DIVERGENCIA_FRETE";
-                 divergencias.push({ ...baseReport, "Motivo": "Divergência de Frete (Cobrança ao vendedor identificada)", "STATUS": "🔴 DIVERGÊNCIA" });
+                 divergencias.push({ ...baseReport, "Motivo": "Divergência de Frete", "STATUS": "🔴 DIVERGÊNCIA" });
              } else {
                  order.status = "DIVERGENCIA_FINANCEIRA";
-                 divergencias.push({ ...baseReport, "Motivo": "Divergência Financeira (Taxa incorreta ou desconto não autorizado)", "STATUS": "🔴 DIVERGÊNCIA" });
+                 divergencias.push({ ...baseReport, "Motivo": "Divergência Financeira", "STATUS": "🔴 DIVERGÊNCIA" });
              }
           }
        }
@@ -360,7 +383,14 @@ export default function Dashboard({ session }: any) {
         {activeTab === 'dashboard' && resultados && (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 w-full animate-fade-in">
              <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center h-80 relative">
-              <button onClick={exportarJSON} className="absolute top-6 right-6 flex items-center gap-2 text-xs font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 px-4 py-2 rounded-lg transition-colors"><FileJson size={16}/> Prova Real (JSON)</button>
+              
+              {/* BOTÕES DE DANGER ZONE / BACKUP */}
+              <div className="absolute top-6 right-6 flex gap-2">
+                 <button onClick={exportarJSON} className="flex items-center gap-2 text-xs font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-lg transition-colors" title="Exportar JSON para Inteligência Artificial"><FileJson size={16}/> Prova Real</button>
+                 <button onClick={exportarBackupGeral} className="flex items-center gap-2 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-lg transition-colors" title="Baixar todos os pedidos do Banco"><Archive size={16}/></button>
+                 <button onClick={apagarTudo} className="flex items-center gap-2 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 px-3 py-2 rounded-lg transition-colors" title="Apagar todos os dados para recomeçar"><Trash2 size={16}/></button>
+              </div>
+
               <h2 className="text-xl font-bold mb-6 text-gray-800">Visão Geral Financeira</h2>
               <div className="grid grid-cols-2 gap-6">
                 <div className="bg-blue-50 p-6 rounded-2xl">
@@ -383,7 +413,10 @@ export default function Dashboard({ session }: any) {
         )}
         
         {activeTab === 'dashboard' && !resultados && (
-           <div className="flex flex-col items-center justify-center bg-white p-16 rounded-3xl shadow-sm border border-gray-100 mt-10 w-full animate-fade-in">
+           <div className="flex flex-col items-center justify-center bg-white p-16 rounded-3xl shadow-sm border border-gray-100 mt-10 w-full animate-fade-in relative">
+             <div className="absolute top-6 right-6">
+                <button onClick={apagarTudo} className="flex items-center gap-2 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 px-3 py-2 rounded-lg transition-colors"><Trash2 size={16}/> Limpar Banco</button>
+             </div>
              <Database size={64} className="text-gray-300 mb-6" />
              <h3 className="text-xl font-bold text-gray-600">Pronto para Auditar</h3>
              <button onClick={() => setActiveTab('upload')} className="mt-8 bg-[#1a1a1a] text-[#F1C40F] px-8 py-3 rounded-full font-bold hover:scale-105 transition-transform">Iniciar Auditoria</button>
@@ -447,7 +480,6 @@ export default function Dashboard({ session }: any) {
             {!resultados ? ( <div className="bg-white rounded-3xl shadow-sm p-12 text-center border border-gray-100 text-gray-500 w-full">Nenhum dado processado.</div> ) : (
               <div className="grid grid-cols-1 gap-8 w-full">
                 
-                {/* DIVERGÊNCIAS FINANCEIRAS E DE FRETE */}
                 <div className="bg-white border border-gray-100 rounded-3xl shadow-sm flex flex-col h-[60vh] overflow-hidden w-full">
                   <div className="bg-red-50 p-4 border-b border-red-100 flex justify-between items-center">
                     <div>
@@ -467,7 +499,7 @@ export default function Dashboard({ session }: any) {
                             <td className="p-4 font-mono font-bold text-gray-700">{item["ID do Pedido"]}</td>
                             <td className="p-4 text-xs font-semibold text-gray-600">{item["Motivo"]}</td>
                             <td className="p-4 text-right text-gray-500">R$ {item["Repasse Esperado (R$)"]?.toFixed(2) || '0.00'}</td>
-                            <td className="p-4 text-right text-gray-500">R$ {item["Receita Kwai Registrada (R$)"]?.toFixed(2) || '0.00'}</td>
+                            <td className="p-4 text-right text-gray-500">R$ {item["Receita Kwai (R$)"]?.toFixed(2) || '0.00'}</td>
                             <td className="p-4 text-right font-black text-[#e74c3c]">R$ {item["Diferença (R$)"]?.toFixed(2)}</td>
                           </tr>
                         ))}
@@ -476,7 +508,6 @@ export default function Dashboard({ session }: any) {
                   </div>
                 </div>
 
-                {/* ATRASADOS */}
                 <div className="bg-white border border-gray-100 rounded-3xl shadow-sm flex flex-col h-[40vh] overflow-hidden w-full">
                   <div className="bg-orange-50 p-4 border-b border-orange-100 flex justify-between items-center">
                     <div>
