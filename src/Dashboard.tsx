@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { supabase } from './supabase';
 import { 
   PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, Legend 
 } from 'recharts';
 import { 
-  LayoutDashboard, UploadCloud, Hourglass, Download, FileSpreadsheet, AlertTriangle, Loader2, Database, LogOut, FileJson, Ban, Package, LineChart, Save, Trash2, Archive
+  LayoutDashboard, UploadCloud, Hourglass, Download, FileSpreadsheet, AlertTriangle, Loader2, Database, LogOut, FileJson, Ban, Package, LineChart, Save, Trash2, Archive, CheckCircle2, Info, Search, ShieldCheck
 } from 'lucide-react';
 
 export default function Dashboard({ session }: any) {
@@ -85,11 +87,9 @@ export default function Dashboard({ session }: any) {
     });
   };
 
-  // --- NOVAS FUNÇÕES DE BACKUP E RESET ---
   const exportarBackupGeral = async () => {
     const { data: dbOrders } = await supabase.from('pedidos_kwai').select('*').eq('user_id', session.user.id);
     if (!dbOrders || dbOrders.length === 0) return alert("Não há dados para exportar.");
-    
     const worksheet = XLSX.utils.json_to_sheet(dbOrders);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Backup_Completo");
@@ -99,20 +99,12 @@ export default function Dashboard({ session }: any) {
   const apagarTudo = async () => {
     const confirmacao = window.confirm("CUIDADO! Isso vai apagar TODOS os pedidos do seu banco de dados para você recomeçar do zero. Seus produtos e custos serão mantidos. Deseja continuar?");
     if (!confirmacao) return;
-
     setIsF5Loading(true);
-    const { error } = await supabase.from('pedidos_kwai').delete().eq('user_id', session.user.id);
-    if (error) {
-      alert("Erro ao apagar dados.");
-      setIsF5Loading(false);
-      return;
-    }
-    
+    await supabase.from('pedidos_kwai').delete().eq('user_id', session.user.id);
     setResultados(null);
     alert("Sistema resetado com sucesso! Lousa em branco.");
     setIsF5Loading(false);
   };
-  // ----------------------------------------
 
   const lerPlanilha = (e: any, setDados: Function) => {
     const file = e.target.files[0];
@@ -135,6 +127,25 @@ export default function Dashboard({ session }: any) {
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Relatório");
     XLSX.writeFile(workbook, `${nomeArquivo}.xlsx`);
+  };
+
+  const exportarPDF = (dados: any[], titulo: string, nomeArquivo: string) => {
+    if (!dados || dados.length === 0) return alert("Não há dados.");
+    const doc = new jsPDF('landscape'); // Formato paisagem para caber mais colunas
+    doc.setFontSize(16);
+    doc.text(`REPASSE.AI - ${titulo}`, 14, 15);
+    doc.setFontSize(10);
+    doc.text(`Documento gerado e auditado em ${new Date().toLocaleDateString()}`, 14, 22);
+    
+    autoTable(doc, {
+      head: [Object.keys(dados[0])],
+      body: dados.map(obj => Object.values(obj)),
+      startY: 28,
+      styles: { fontSize: 8, cellPadding: 3 },
+      headStyles: { fillColor: [26, 26, 26], textColor: [255, 255, 255] },
+      alternateRowStyles: { fillColor: [245, 245, 245] }
+    });
+    doc.save(`${nomeArquivo}.pdf`);
   };
 
   const exportarJSON = () => {
@@ -254,7 +265,6 @@ export default function Dashboard({ session }: any) {
     let atrasados: any[] = [], divergencias: any[] = [], noPrazo: any[] = [], corretos: any[] = [], cancelados: any[] = [];
     let valorBrutoGeral = 0, totalDiferencas = 0, custoTotalGeral = 0, lucroLiquidoGeral = 0;
 
-    // A NOVA LÓGICA DE AUDITORIA EXATA
     Array.from(orderMap.values()).forEach(order => {
        const kwaiRow = kwaiData.find(r => String(extrair(r, ['número do pedido', 'pedido', 'id'])) === order.id_pedido);
        
@@ -275,13 +285,12 @@ export default function Dashboard({ session }: any) {
           custoTotalGeral += order.custo_pedido;
 
        } else {
-          // Lendo as gavetas certas da Kwai
+          // NOVA LÓGICA DE AUDITORIA FORENSE
           const precoOriginal = Number(extrair(kwaiRow, ['preço do produto'])) || order.valor_bruto;
           const subvencaoAbs = Math.abs(Number(extrair(kwaiRow, ['subvenção ao comércio'])) || 0);
           const freteCobradoVendedor = Math.abs(Number(extrair(kwaiRow, ['frete pago pelo vendedor'])) || 0);
           const recKwai = Number(extrair(kwaiRow, ['receita', 'repasse'])) || 0;
 
-          // A Matemática Perfeita
           const valorRealVenda = precoOriginal - subvencaoAbs;
           const taxa20 = valorRealVenda * 0.20;
           const taxaOp = order.qtd * 4.00;
@@ -357,113 +366,192 @@ export default function Dashboard({ session }: any) {
     return <div className="h-screen w-full flex items-center justify-center bg-gray-100"><Loader2 className="animate-spin text-[#F1C40F]" size={48} /></div>;
   }
 
+  // COMPONENTE DE HEADER DIDÁTICO REUTILIZÁVEL
+  const SecaoHeader = ({ titulo, icone: Icon, descricao }: any) => (
+    <div className="bg-gradient-to-r from-gray-900 to-gray-800 rounded-3xl p-6 mb-8 text-white shadow-lg flex items-center gap-6 relative overflow-hidden">
+      <div className="absolute top-0 right-0 w-32 h-32 bg-[#F1C40F] opacity-10 rounded-full blur-3xl -mr-10 -mt-10"></div>
+      <div className="bg-gray-800/50 p-4 rounded-2xl border border-gray-700">
+        <Icon size={32} className="text-[#F1C40F]" />
+      </div>
+      <div>
+        <h2 className="text-2xl font-black tracking-tight">{titulo}</h2>
+        <p className="text-gray-300 font-medium text-sm mt-1 max-w-2xl">{descricao}</p>
+      </div>
+    </div>
+  );
+
   return (
-    <div className="flex h-screen w-full bg-gray-100 overflow-hidden font-sans">
-      <div className="w-64 bg-[#1a1a1a] text-white flex-shrink-0 p-6 flex flex-col justify-between overflow-y-auto">
-        <div>
-          <h1 className="text-2xl font-black mb-8 tracking-widest">REPASSE<span className="text-[#F1C40F]">.AI</span></h1>
-          <nav className="space-y-4">
-            <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 p-3 rounded-lg font-bold ${activeTab === 'dashboard' ? 'bg-[#F1C40F] text-black' : 'text-gray-400 hover:text-white'}`}><LayoutDashboard size={20}/> Visão Geral</button>
-            <button onClick={() => setActiveTab('upload')} className={`w-full flex items-center gap-3 p-3 rounded-lg font-bold ${activeTab === 'upload' ? 'bg-[#F1C40F] text-black' : 'text-gray-400 hover:text-white'}`}><UploadCloud size={20}/> Nova Auditoria</button>
-            <button onClick={() => setActiveTab('aguardando')} className={`w-full flex items-center gap-3 p-3 rounded-lg font-bold ${activeTab === 'aguardando' ? 'bg-[#F1C40F] text-black' : 'text-gray-400 hover:text-white'}`}><Hourglass size={20}/> No Prazo</button>
-            <button onClick={() => setActiveTab('divergencias')} className={`w-full flex items-center gap-3 p-3 rounded-lg font-bold ${activeTab === 'divergencias' ? 'bg-[#F1C40F] text-black' : 'text-gray-400 hover:text-white'}`}><AlertTriangle size={20}/> Divergências / Atrasos</button>
-            <button onClick={() => setActiveTab('malhafina')} className={`w-full flex items-center gap-3 p-3 rounded-lg font-bold ${activeTab === 'malhafina' ? 'bg-[#F1C40F] text-black' : 'text-gray-400 hover:text-white'}`}><Ban size={20}/> Malha Fina</button>
+    <div className="flex h-screen w-full bg-[#f8fafc] overflow-hidden font-sans">
+      {/* SIDEBAR COM NOVO DESIGN */}
+      <div className="w-64 bg-[#111827] text-gray-300 flex-shrink-0 flex flex-col justify-between overflow-y-auto border-r border-gray-800">
+        <div className="p-6">
+          <div className="flex items-center gap-3 mb-10">
+            <div className="bg-[#F1C40F] p-2 rounded-xl"><ShieldCheck size={24} className="text-[#111827]" /></div>
+            <h1 className="text-2xl font-black text-white tracking-widest">REPASSE<span className="text-[#F1C40F]">.AI</span></h1>
+          </div>
+          
+          <nav className="space-y-2">
+            <button onClick={() => setActiveTab('dashboard')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeTab === 'dashboard' ? 'bg-[#F1C40F] text-[#111827] shadow-lg scale-105' : 'hover:bg-gray-800 hover:text-white'}`}><LayoutDashboard size={20}/> Visão Geral</button>
+            <button onClick={() => setActiveTab('upload')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeTab === 'upload' ? 'bg-[#F1C40F] text-[#111827] shadow-lg scale-105' : 'hover:bg-gray-800 hover:text-white'}`}><UploadCloud size={20}/> Nova Auditoria</button>
+            <button onClick={() => setActiveTab('aguardando')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeTab === 'aguardando' ? 'bg-[#F1C40F] text-[#111827] shadow-lg scale-105' : 'hover:bg-gray-800 hover:text-white'}`}><Hourglass size={20}/> No Prazo</button>
+            <button onClick={() => setActiveTab('divergencias')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeTab === 'divergencias' ? 'bg-[#F1C40F] text-[#111827] shadow-lg scale-105' : 'hover:bg-gray-800 hover:text-white'}`}><AlertTriangle size={20}/> Divergências / Atrasos</button>
+            <button onClick={() => setActiveTab('malhafina')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeTab === 'malhafina' ? 'bg-[#F1C40F] text-[#111827] shadow-lg scale-105' : 'hover:bg-gray-800 hover:text-white'}`}><Ban size={20}/> Malha Fina</button>
             
-            <div className="h-px bg-gray-800 my-4"></div>
-            <button onClick={() => setActiveTab('produtos')} className={`w-full flex items-center gap-3 p-3 rounded-lg font-bold ${activeTab === 'produtos' ? 'bg-[#F1C40F] text-black' : 'text-gray-400 hover:text-white'}`}><Package size={20}/> Meus Produtos</button>
-            <button onClick={() => setActiveTab('lucro')} className={`w-full flex items-center gap-3 p-3 rounded-lg font-bold ${activeTab === 'lucro' ? 'bg-[#F1C40F] text-black' : 'text-gray-400 hover:text-white'}`}><LineChart size={20}/> Lucratividade</button>
+            <div className="h-px bg-gray-800 my-4 mx-2"></div>
+            <p className="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-2 ml-3">Inteligência de Negócio</p>
+            <button onClick={() => setActiveTab('produtos')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeTab === 'produtos' ? 'bg-[#10b981] text-white shadow-lg scale-105' : 'hover:bg-gray-800 hover:text-white'}`}><Package size={20}/> Meus Produtos</button>
+            <button onClick={() => setActiveTab('lucro')} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeTab === 'lucro' ? 'bg-[#10b981] text-white shadow-lg scale-105' : 'hover:bg-gray-800 hover:text-white'}`}><LineChart size={20}/> Lucratividade</button>
           </nav>
         </div>
-        <button onClick={() => supabase.auth.signOut()} className="w-full flex items-center justify-center gap-2 p-3 text-red-400 hover:bg-gray-800 rounded-lg transition-colors font-bold mt-auto border border-gray-800"><LogOut size={18}/> Sair</button>
+        <div className="p-6">
+          <button onClick={() => supabase.auth.signOut()} className="w-full flex items-center justify-center gap-2 p-3 text-red-400 bg-red-400/10 hover:bg-red-400/20 rounded-xl transition-colors font-bold"><LogOut size={18}/> Sair da Conta</button>
+        </div>
       </div>
 
-      <div className="flex-1 h-full overflow-y-auto p-8">
+      <div className="flex-1 h-full overflow-y-auto p-8 relative">
         
-        {/* TAB 1: VISÃO GERAL */}
+        {/* TAB 1: VISÃO GERAL (Com Dados) */}
         {activeTab === 'dashboard' && resultados && (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 w-full animate-fade-in">
-             <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center h-80 relative">
-              
-              {/* BOTÕES DE DANGER ZONE / BACKUP */}
-              <div className="absolute top-6 right-6 flex gap-2">
-                 <button onClick={exportarJSON} className="flex items-center gap-2 text-xs font-bold text-gray-500 bg-gray-100 hover:bg-gray-200 px-3 py-2 rounded-lg transition-colors" title="Exportar JSON para Inteligência Artificial"><FileJson size={16}/> Prova Real</button>
-                 <button onClick={exportarBackupGeral} className="flex items-center gap-2 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-lg transition-colors" title="Baixar todos os pedidos do Banco"><Archive size={16}/></button>
-                 <button onClick={apagarTudo} className="flex items-center gap-2 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 px-3 py-2 rounded-lg transition-colors" title="Apagar todos os dados para recomeçar"><Trash2 size={16}/></button>
+          <div className="w-full animate-fade-in pb-10">
+            <SecaoHeader titulo="Visão Geral Financeira" icone={LayoutDashboard} descricao="O raio-x completo do seu negócio. Acompanhe o volume real de vendas e identifique o capital retido por divergências das plataformas." />
+            
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+               <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center h-80 relative group hover:shadow-md transition-shadow">
+                
+                <div className="absolute top-6 right-6 flex gap-2">
+                   <button onClick={exportarJSON} className="flex items-center gap-2 text-xs font-bold text-gray-500 bg-gray-50 hover:bg-gray-100 px-4 py-2 rounded-xl transition-colors border border-gray-200" title="Exportar JSON para Inteligência Artificial"><FileJson size={16}/> Prova Real (JSON)</button>
+                   <button onClick={exportarBackupGeral} className="flex items-center gap-2 text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-3 py-2 rounded-xl transition-colors" title="Baixar todos os pedidos do Banco"><Archive size={16}/></button>
+                   <button onClick={apagarTudo} className="flex items-center gap-2 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 px-3 py-2 rounded-xl transition-colors" title="Apagar todos os dados para recomeçar"><Trash2 size={16}/></button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-6 mt-8">
+                  <div className="bg-gradient-to-br from-gray-50 to-gray-100 p-6 rounded-2xl border border-gray-200">
+                    <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2 flex items-center gap-2"><CheckCircle2 size={14} className="text-green-500"/> Valor Real de Venda</p>
+                    <p className="text-3xl font-black text-gray-900">R$ {resultados.valorBruto.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                  </div>
+                  <div className="bg-gradient-to-br from-red-50 to-white p-6 rounded-2xl border border-red-100">
+                    <p className="text-xs font-bold text-red-600 uppercase tracking-widest mb-2 flex items-center gap-2"><AlertTriangle size={14}/> Divergências (Cobrar)</p>
+                    <p className="text-3xl font-black text-red-600">R$ {resultados.totalRetido.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                  </div>
+                </div>
               </div>
 
-              <h2 className="text-xl font-bold mb-6 text-gray-800">Visão Geral Financeira</h2>
-              <div className="grid grid-cols-2 gap-6">
-                <div className="bg-blue-50 p-6 rounded-2xl">
-                  <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Valor Real de Venda</p>
-                  <p className="text-3xl font-black text-gray-900">R$ {resultados.valorBruto.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
-                </div>
-                <div className="bg-red-50 p-6 rounded-2xl border border-red-100">
-                  <p className="text-xs font-bold text-red-600 uppercase tracking-widest mb-2">Divergências (Cobrar)</p>
-                  <p className="text-3xl font-black text-red-600">R$ {resultados.totalRetido.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
-                </div>
+              <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 h-80 flex flex-col hover:shadow-md transition-shadow">
+                <h3 className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-2">Status dos Pedidos</h3>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart><Pie data={resultados.chartStatus} cx="50%" cy="50%" innerRadius="60%" outerRadius="80%" paddingAngle={5} dataKey="value">{resultados.chartStatus.map((_:any, index:number) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}</Pie><RechartsTooltip /><Legend verticalAlign="bottom" height={36}/></PieChart>
+                </ResponsiveContainer>
               </div>
-            </div>
-            <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 h-80 flex flex-col">
-              <h3 className="text-lg font-bold text-gray-800 mb-6">Status dos Pedidos</h3>
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart><Pie data={resultados.chartStatus} cx="50%" cy="50%" innerRadius="60%" outerRadius="80%" paddingAngle={5} dataKey="value">{resultados.chartStatus.map((_:any, index:number) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}</Pie><RechartsTooltip /><Legend verticalAlign="bottom" height={36}/></PieChart>
-              </ResponsiveContainer>
             </div>
           </div>
         )}
         
+        {/* HOME DIDÁTICA (Sem Dados) */}
         {activeTab === 'dashboard' && !resultados && (
-           <div className="flex flex-col items-center justify-center bg-white p-16 rounded-3xl shadow-sm border border-gray-100 mt-10 w-full animate-fade-in relative">
-             <div className="absolute top-6 right-6">
-                <button onClick={apagarTudo} className="flex items-center gap-2 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 px-3 py-2 rounded-lg transition-colors"><Trash2 size={16}/> Limpar Banco</button>
+           <div className="w-full animate-fade-in relative max-w-5xl mx-auto">
+             <div className="absolute top-0 right-0 mt-4 mr-4">
+                <button onClick={apagarTudo} className="flex items-center gap-2 text-xs font-bold text-red-600 bg-white border border-red-100 shadow-sm hover:bg-red-50 px-4 py-2 rounded-xl transition-colors"><Trash2 size={16}/> Limpar Banco</button>
              </div>
-             <Database size={64} className="text-gray-300 mb-6" />
-             <h3 className="text-xl font-bold text-gray-600">Pronto para Auditar</h3>
-             <button onClick={() => setActiveTab('upload')} className="mt-8 bg-[#1a1a1a] text-[#F1C40F] px-8 py-3 rounded-full font-bold hover:scale-105 transition-transform">Iniciar Auditoria</button>
+             
+             <div className="text-center mb-12 pt-10">
+               <div className="inline-flex items-center justify-center p-4 bg-[#F1C40F]/20 rounded-full mb-6">
+                 <ShieldCheck size={48} className="text-yellow-600" />
+               </div>
+               <h2 className="text-4xl font-black text-gray-900 tracking-tight mb-4">A primeira Auditoria Forense para Kwai.</h2>
+               <p className="text-gray-500 text-lg max-w-2xl mx-auto">Não confie em planilhas cegas. Nosso algoritmo destrincha as taxas reais e expõe os centavos que a plataforma tenta esconder de você.</p>
+             </div>
+
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
+               <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 relative overflow-hidden group hover:-translate-y-2 transition-transform">
+                 <div className="absolute top-0 right-0 w-16 h-16 bg-blue-50 rounded-bl-full -mr-2 -mt-2 transition-transform group-hover:scale-150"></div>
+                 <Database size={32} className="text-blue-500 mb-6 relative z-10" />
+                 <h3 className="text-xl font-black text-gray-900 mb-2">1. Cruzamento Inteligente</h3>
+                 <p className="text-gray-500 text-sm">Basta subir seu relatório logístico da UPSeller e o financeiro da Kwai. O sistema cruza os IDs instantaneamente.</p>
+               </div>
+               
+               <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 relative overflow-hidden group hover:-translate-y-2 transition-transform">
+                 <div className="absolute top-0 right-0 w-16 h-16 bg-yellow-50 rounded-bl-full -mr-2 -mt-2 transition-transform group-hover:scale-150"></div>
+                 <Search size={32} className="text-yellow-500 mb-6 relative z-10" />
+                 <h3 className="text-xl font-black text-gray-900 mb-2">2. A Regra de Ouro</h3>
+                 <p className="text-gray-500 text-sm">O sistema limpa a maquiagem da Kwai. O repasse correto é: <span className="font-bold text-gray-800 bg-gray-100 px-1 rounded">(Preço Original - Seu Desconto) - 20% - R$4.</span></p>
+               </div>
+
+               <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 relative overflow-hidden group hover:-translate-y-2 transition-transform">
+                 <div className="absolute top-0 right-0 w-16 h-16 bg-green-50 rounded-bl-full -mr-2 -mt-2 transition-transform group-hover:scale-150"></div>
+                 <LineChart size={32} className="text-green-500 mb-6 relative z-10" />
+                 <h3 className="text-xl font-black text-gray-900 mb-2">3. Recuperação & DRE</h3>
+                 <p className="text-gray-500 text-sm">Aponte fretes cobrados indevidamente, exija o repasse de pedidos atrasados e calcule seu lucro líquido real.</p>
+               </div>
+             </div>
+
+             <div className="text-center">
+               <button onClick={() => setActiveTab('upload')} className="bg-[#111827] text-[#F1C40F] px-10 py-5 rounded-2xl font-black text-lg hover:shadow-2xl hover:scale-105 transition-all flex items-center justify-center gap-3 mx-auto">
+                 <UploadCloud size={24}/> COMEÇAR PRIMEIRA AUDITORIA
+               </button>
+             </div>
            </div>
         )}
 
         {/* TAB 2: UPLOAD */}
         {activeTab === 'upload' && (
-          <div className="w-full flex flex-col items-center gap-6 animate-fade-in">
-             <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-8 mb-4">
-              <label className="border-2 border-dashed border-gray-300 bg-white rounded-3xl p-10 flex flex-col items-center cursor-pointer hover:border-[#F1C40F] transition-all"><UploadCloud size={48} className="text-gray-400 mb-4"/><p className="font-bold text-gray-700">{upsellerData.length > 0 ? `${upsellerData.length} registros (Upseller)` : '1. Upload UPSELLER'}</p><input type="file" className="hidden" onChange={(e) => lerPlanilha(e, setUpsellerData)} /></label>
-              <label className="border-2 border-dashed border-gray-300 bg-white rounded-3xl p-10 flex flex-col items-center cursor-pointer hover:border-[#F1C40F] transition-all"><FileSpreadsheet size={48} className="text-gray-400 mb-4"/><p className="font-bold text-gray-700">{kwaiData.length > 0 ? `${kwaiData.length} registros (Kwai)` : '2. Upload KWAI'}</p><input type="file" className="hidden" onChange={(e) => lerPlanilha(e, setKwaiData)} /></label>
+          <div className="w-full animate-fade-in max-w-5xl mx-auto pb-10">
+             <SecaoHeader titulo="Processar Relatórios" icone={UploadCloud} descricao="Suba os relatórios oficiais da UPSeller (para base logística e IDs) e da Kwai (para valores financeiros). Nossa IA fará o resto." />
+             
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+              <label className="bg-white border-2 border-dashed border-gray-300 rounded-3xl p-12 flex flex-col items-center justify-center cursor-pointer hover:border-[#F1C40F] hover:bg-yellow-50/30 transition-all group">
+                <div className="bg-gray-50 p-4 rounded-full mb-6 group-hover:bg-[#F1C40F]/20 transition-colors"><Package size={40} className="text-gray-400 group-hover:text-yellow-600"/></div>
+                <h3 className="font-black text-xl text-gray-800 mb-2">1. Relatório UPSELLER</h3>
+                <p className="text-gray-500 text-sm mb-6 text-center">{upsellerData.length > 0 ? <span className="text-green-600 font-bold bg-green-50 px-3 py-1 rounded-full">{upsellerData.length} registros prontos</span> : 'Selecione o arquivo Excel / CSV'}</p>
+                <div className="bg-gray-100 text-gray-600 px-6 py-2 rounded-xl font-bold text-sm group-hover:bg-white group-hover:shadow-sm">Procurar Arquivo</div>
+                <input type="file" className="hidden" onChange={(e) => lerPlanilha(e, setUpsellerData)} />
+              </label>
+
+              <label className="bg-white border-2 border-dashed border-gray-300 rounded-3xl p-12 flex flex-col items-center justify-center cursor-pointer hover:border-[#F1C40F] hover:bg-yellow-50/30 transition-all group">
+                <div className="bg-gray-50 p-4 rounded-full mb-6 group-hover:bg-[#F1C40F]/20 transition-colors"><FileSpreadsheet size={40} className="text-gray-400 group-hover:text-yellow-600"/></div>
+                <h3 className="font-black text-xl text-gray-800 mb-2">2. Extrato Financeiro KWAI</h3>
+                <p className="text-gray-500 text-sm mb-6 text-center">{kwaiData.length > 0 ? <span className="text-green-600 font-bold bg-green-50 px-3 py-1 rounded-full">{kwaiData.length} registros prontos</span> : 'Selecione o arquivo Excel / CSV'}</p>
+                <div className="bg-gray-100 text-gray-600 px-6 py-2 rounded-xl font-bold text-sm group-hover:bg-white group-hover:shadow-sm">Procurar Arquivo</div>
+                <input type="file" className="hidden" onChange={(e) => lerPlanilha(e, setKwaiData)} />
+              </label>
             </div>
-            <button onClick={executarConciliacao} disabled={isSyncing} className={`w-full py-6 rounded-2xl shadow-xl font-black text-xl uppercase tracking-widest flex items-center justify-center gap-3 transition-all ${isSyncing ? 'bg-gray-800 text-gray-400 cursor-not-allowed' : 'bg-[#1a1a1a] text-[#F1C40F] hover:-translate-y-1'}`}>
-              {isSyncing ? <><Loader2 className="animate-spin" size={24}/> Sincronizando com a Nuvem...</> : <><Database size={24}/> Executar Auditoria Forense</>}
+            
+            <button onClick={executarConciliacao} disabled={isSyncing} className={`w-full py-6 rounded-2xl shadow-xl font-black text-xl uppercase tracking-widest flex items-center justify-center gap-3 transition-all ${isSyncing ? 'bg-gray-800 text-gray-400 cursor-not-allowed' : 'bg-gradient-to-r from-[#111827] to-gray-800 text-[#F1C40F] hover:shadow-2xl hover:-translate-y-1'}`}>
+              {isSyncing ? <><Loader2 className="animate-spin" size={24}/> Auditando milhares de linhas...</> : <><ShieldCheck size={28}/> Executar Auditoria Forense</>}
             </button>
           </div>
         )}
 
         {/* TAB 3: AGUARDANDO NO PRAZO */}
         {activeTab === 'aguardando' && (
-          <div className="w-full animate-fade-in">
-            <header className="mb-8 flex justify-between items-center">
-              <div>
-                <h2 className="text-3xl font-black text-gray-900 tracking-tight">Pedidos no Prazo</h2>
-                <p className="text-gray-500 mt-1">Aguardando liquidação da plataforma.</p>
-              </div>
-              {resultados?.noPrazo.length > 0 && <button onClick={() => exportarExcel(resultados.noPrazo, "Aguardando_Vencimento")} className="bg-green-100 text-green-700 px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-green-200 transition-colors"><Download size={18}/> Exportar Excel</button>}
-            </header>
-            {!resultados ? ( <div className="bg-white rounded-3xl shadow-sm p-12 text-center border border-gray-100 text-gray-500">Nenhum dado processado.</div> ) : (
-              <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden w-full max-h-[70vh]">
-                <div className="overflow-y-auto h-full p-0">
-                  <table className="w-full text-left border-collapse">
-                    <thead className="bg-gray-50 text-gray-500 text-xs uppercase font-bold sticky top-0 z-10 shadow-sm">
-                      <tr><th className="p-4">ID do Pedido</th><th className="p-4">Vencimento Esperado</th><th className="p-4 text-right">Valor Estimado</th></tr>
+          <div className="w-full animate-fade-in pb-10">
+            <SecaoHeader titulo="Pedidos no Prazo" icone={Hourglass} descricao="Fique tranquilo. Estes pedidos foram enviados recentemente e ainda estão dentro do ciclo logístico de 22 dias da plataforma para serem pagos." />
+            
+            {!resultados ? ( <div className="bg-white rounded-3xl p-16 text-center border border-gray-100 text-gray-400 font-medium">Faça uma auditoria primeiro para visualizar.</div> ) : (
+              <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden w-full">
+                <div className="p-4 border-b border-gray-100 bg-gray-50 flex justify-end gap-2">
+                   {resultados.noPrazo.length > 0 && (
+                     <>
+                        <button onClick={() => exportarExcel(resultados.noPrazo, "No_Prazo")} className="bg-white text-green-700 border border-gray-200 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 hover:bg-green-50 transition-colors"><Download size={16}/> Baixar Excel</button>
+                        <button onClick={() => exportarPDF(resultados.noPrazo, "Pedidos Aguardando Prazo Logístico", "No_Prazo")} className="bg-white text-red-700 border border-gray-200 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 hover:bg-red-50 transition-colors"><FileJson size={16}/> Gerar PDF</button>
+                     </>
+                   )}
+                </div>
+                <div className="max-h-[60vh] overflow-y-auto">
+                  <table className="w-full text-left">
+                    <thead className="bg-white text-gray-400 text-xs uppercase font-black sticky top-0 shadow-sm">
+                      <tr><th className="p-5">ID do Pedido</th><th className="p-5">Vencimento Máximo</th><th className="p-5 text-right">Valor Estimado</th></tr>
                     </thead>
                     <tbody className="text-sm">
                       {resultados.noPrazo.map((item: any, idx: number) => (
-                        <tr key={idx} className="border-b border-gray-50 hover:bg-gray-50">
-                          <td className="p-4 font-mono font-bold text-gray-700">{item["ID do Pedido"]}</td>
-                          <td className="p-4 text-yellow-600 font-semibold">{item["Vencimento Esperado"]}</td>
-                          <td className="p-4 text-right font-bold text-gray-700">R$ {item["Valor Estimado (R$)"].toFixed(2)}</td>
+                        <tr key={idx} className="border-b border-gray-50 hover:bg-gray-50/80 transition-colors">
+                          <td className="p-5 font-mono font-bold text-gray-700">{item["ID do Pedido"]}</td>
+                          <td className="p-5 text-yellow-600 font-bold bg-yellow-50/30 rounded-lg inline-block mt-3">{item["Vencimento Esperado"]}</td>
+                          <td className="p-5 text-right font-black text-gray-800">R$ {item["Valor Estimado (R$)"].toFixed(2)}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                  {resultados.noPrazo.length === 0 && <p className="text-gray-400 text-center py-10">Lista vazia.</p>}
+                  {resultados.noPrazo.length === 0 && <p className="text-gray-400 text-center py-16 font-medium">Nenhum pedido no prazo encontrado.</p>}
                 </div>
               </div>
             )}
@@ -473,63 +561,77 @@ export default function Dashboard({ session }: any) {
         {/* TAB 4: DIVERGÊNCIAS E ATRASOS */}
         {activeTab === 'divergencias' && (
           <div className="w-full animate-fade-in pb-10">
-             <header className="mb-8">
-              <h2 className="text-3xl font-black text-gray-900 tracking-tight">Divergências & Atrasos</h2>
-              <p className="text-gray-500 mt-1">Exportação em Excel configurada para abertura de chamados na Kwai.</p>
-            </header>
-            {!resultados ? ( <div className="bg-white rounded-3xl shadow-sm p-12 text-center border border-gray-100 text-gray-500 w-full">Nenhum dado processado.</div> ) : (
+            <SecaoHeader titulo="Divergências & Atrasos" icone={AlertTriangle} descricao="Onde recuperamos o seu dinheiro. Exporte as planilhas abaixo em Excel ou PDF e anexe diretamente nos chamados do suporte da Kwai." />
+            
+            {!resultados ? ( <div className="bg-white rounded-3xl p-16 text-center border border-gray-100 text-gray-400 font-medium">Faça uma auditoria primeiro para visualizar.</div> ) : (
               <div className="grid grid-cols-1 gap-8 w-full">
                 
-                <div className="bg-white border border-gray-100 rounded-3xl shadow-sm flex flex-col h-[60vh] overflow-hidden w-full">
-                  <div className="bg-red-50 p-4 border-b border-red-100 flex justify-between items-center">
+                {/* DIVERGÊNCIAS FINANCEIRAS */}
+                <div className="bg-white border border-gray-100 rounded-3xl shadow-sm flex flex-col h-[60vh] overflow-hidden w-full relative">
+                  <div className="absolute top-0 left-0 w-2 h-full bg-red-500"></div>
+                  <div className="bg-white p-6 border-b border-gray-100 flex justify-between items-center ml-2">
                     <div>
-                      <h3 className="font-black text-red-800 text-lg flex items-center gap-2"><AlertTriangle size={20}/> Divergências Financeiras & Frete</h3>
-                      <p className="text-red-600 text-xs mt-1">{resultados.divergencias.length} pedidos com diferenças no repasse.</p>
+                      <h3 className="font-black text-gray-900 text-xl flex items-center gap-2">Divergências Financeiras</h3>
+                      <p className="text-gray-500 text-sm mt-1">{resultados.divergencias.length} pedidos com diferenças indevidas no repasse.</p>
                     </div>
-                    {resultados.divergencias.length > 0 && <button onClick={() => exportarExcel(resultados.divergencias, "Divergencias_Financeiras")} className="bg-green-100 text-green-800 px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-1"><Download size={14}/> Excel</button>}
+                    {resultados.divergencias.length > 0 && (
+                      <div className="flex gap-2">
+                         <button onClick={() => exportarExcel(resultados.divergencias, "Divergencias_Financeiras")} className="bg-green-50 text-green-700 border border-green-100 hover:bg-green-100 px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 transition-colors"><Download size={16}/> Excel</button>
+                         <button onClick={() => exportarPDF(resultados.divergencias, "Dossiê de Divergências Financeiras e Frete", "Divergencias_Financeiras")} className="bg-red-50 text-red-700 border border-red-100 hover:bg-red-100 px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 transition-colors"><FileJson size={16}/> PDF</button>
+                      </div>
+                    )}
                   </div>
-                  <div className="overflow-y-auto flex-1 p-0">
+                  <div className="overflow-y-auto flex-1 ml-2">
                     <table className="w-full text-left">
-                      <thead className="bg-gray-50 text-gray-400 text-xs uppercase font-bold sticky top-0 z-10 shadow-sm">
-                        <tr><th className="p-4">ID</th><th className="p-4">Motivo</th><th className="p-4 text-right">Repasse Esperado</th><th className="p-4 text-right">Receita Kwai</th><th className="p-4 text-right text-red-500">Diferença (Cobrar)</th></tr>
+                      <thead className="bg-gray-50 text-gray-500 text-[10px] uppercase font-black sticky top-0 shadow-sm">
+                        <tr><th className="p-4">ID do Pedido</th><th className="p-4">Análise Forense (Motivo)</th><th className="p-4 text-right">Repasse Correto</th><th className="p-4 text-right">Repasse Realizado</th><th className="p-4 text-right text-red-600">Falta Pagar</th></tr>
                       </thead>
                       <tbody className="text-sm">
                         {resultados.divergencias.map((item: any, idx: number) => (
-                          <tr key={idx} className="border-b border-gray-50 hover:bg-red-50/50">
-                            <td className="p-4 font-mono font-bold text-gray-700">{item["ID do Pedido"]}</td>
-                            <td className="p-4 text-xs font-semibold text-gray-600">{item["Motivo"]}</td>
-                            <td className="p-4 text-right text-gray-500">R$ {item["Repasse Esperado (R$)"]?.toFixed(2) || '0.00'}</td>
-                            <td className="p-4 text-right text-gray-500">R$ {item["Receita Kwai (R$)"]?.toFixed(2) || '0.00'}</td>
-                            <td className="p-4 text-right font-black text-[#e74c3c]">R$ {item["Diferença (R$)"]?.toFixed(2)}</td>
+                          <tr key={idx} className="border-b border-gray-50 hover:bg-red-50/30 transition-colors">
+                            <td className="p-4 font-mono font-bold text-gray-800">{item["ID do Pedido"]}</td>
+                            <td className="p-4"><span className="bg-red-100 text-red-700 px-2 py-1 rounded-md text-xs font-bold">{item["Motivo"]}</span></td>
+                            <td className="p-4 text-right font-medium text-gray-500">R$ {item["Repasse Esperado (R$)"]?.toFixed(2) || '0.00'}</td>
+                            <td className="p-4 text-right font-medium text-gray-500">R$ {item["Receita Kwai (R$)"]?.toFixed(2) || '0.00'}</td>
+                            <td className="p-4 text-right font-black text-red-600">R$ {item["Diferença (R$)"]?.toFixed(2)}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
+                    {resultados.divergencias.length === 0 && <div className="p-16 text-center text-gray-400 font-bold">Nenhuma divergência encontrada.</div>}
                   </div>
                 </div>
 
-                <div className="bg-white border border-gray-100 rounded-3xl shadow-sm flex flex-col h-[40vh] overflow-hidden w-full">
-                  <div className="bg-orange-50 p-4 border-b border-orange-100 flex justify-between items-center">
+                {/* ATRASADOS */}
+                <div className="bg-white border border-gray-100 rounded-3xl shadow-sm flex flex-col h-[50vh] overflow-hidden w-full relative">
+                  <div className="absolute top-0 left-0 w-2 h-full bg-orange-500"></div>
+                  <div className="bg-white p-6 border-b border-gray-100 flex justify-between items-center ml-2">
                     <div>
-                      <h3 className="font-black text-orange-800 text-lg flex items-center gap-2"><Hourglass size={20}/> Repasses Atrasados</h3>
-                      <p className="text-orange-600 text-xs mt-1">{resultados.atrasados.length} pedidos além dos 22 dias.</p>
+                      <h3 className="font-black text-gray-900 text-xl flex items-center gap-2">Repasses Atrasados</h3>
+                      <p className="text-gray-500 text-sm mt-1">{resultados.atrasados.length} pedidos já passaram do prazo de 22 dias.</p>
                     </div>
-                    {resultados.atrasados.length > 0 && <button onClick={() => exportarExcel(resultados.atrasados, "Atrasados_Kwai")} className="bg-green-100 text-green-800 px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-1"><Download size={14}/> Excel</button>}
+                    {resultados.atrasados.length > 0 && (
+                       <div className="flex gap-2">
+                          <button onClick={() => exportarExcel(resultados.atrasados, "Repasses_Atrasados")} className="bg-green-50 text-green-700 border border-green-100 hover:bg-green-100 px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 transition-colors"><Download size={16}/> Excel</button>
+                          <button onClick={() => exportarPDF(resultados.atrasados, "Dossiê de Repasses Atrasados", "Repasses_Atrasados")} className="bg-red-50 text-red-700 border border-red-100 hover:bg-red-100 px-4 py-2 rounded-xl font-bold text-sm flex items-center gap-2 transition-colors"><FileJson size={16}/> PDF</button>
+                       </div>
+                    )}
                   </div>
-                  <div className="overflow-y-auto flex-1 p-0">
+                  <div className="overflow-y-auto flex-1 ml-2">
                     <table className="w-full text-left">
-                      <thead className="bg-gray-50 text-gray-400 text-xs uppercase font-bold sticky top-0 z-10 shadow-sm">
-                        <tr><th className="p-4">ID</th><th className="p-4 text-right">Repasse Atrasado Estimado</th></tr>
+                      <thead className="bg-gray-50 text-gray-500 text-[10px] uppercase font-black sticky top-0 shadow-sm">
+                        <tr><th className="p-5">ID do Pedido</th><th className="p-5 text-right">Repasse Atrasado Estimado</th></tr>
                       </thead>
                       <tbody className="text-sm">
                         {resultados.atrasados.map((item: any, idx: number) => (
-                          <tr key={idx} className="border-b border-gray-50 hover:bg-orange-50/50">
-                            <td className="p-4 font-mono font-bold text-gray-700">{item["ID do Pedido"]}</td>
-                            <td className="p-4 text-right font-black text-orange-600">R$ {item["Repasse Atrasado Estimado (R$)"].toFixed(2)}</td>
+                          <tr key={idx} className="border-b border-gray-50 hover:bg-orange-50/30 transition-colors">
+                            <td className="p-5 font-mono font-bold text-gray-800">{item["ID do Pedido"]}</td>
+                            <td className="p-5 text-right font-black text-orange-600">R$ {item["Repasse Atrasado Estimado (R$)"].toFixed(2)}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
+                    {resultados.atrasados.length === 0 && <div className="p-16 text-center text-gray-400 font-bold">Nenhum repasse atrasado.</div>}
                   </div>
                 </div>
 
@@ -540,32 +642,35 @@ export default function Dashboard({ session }: any) {
 
         {/* TAB 5: MALHA FINA */}
         {activeTab === 'malhafina' && (
-          <div className="w-full animate-fade-in">
-            <header className="mb-8 flex justify-between items-center">
-              <div>
-                <h2 className="text-3xl font-black text-gray-900 tracking-tight">Malha Fina (Cancelados)</h2>
-                <p className="text-gray-500 mt-1">Pedidos isolados para não impactar a sua conciliação principal.</p>
-              </div>
-              {resultados?.cancelados.length > 0 && <button onClick={() => exportarExcel(resultados.cancelados, "Cancelados_Kwai")} className="bg-gray-200 text-gray-800 px-6 py-3 rounded-xl font-bold flex items-center gap-2 hover:bg-gray-300 transition-colors"><Download size={18}/> Exportar Excel</button>}
-            </header>
-            {!resultados ? ( <div className="bg-white rounded-3xl shadow-sm p-12 text-center border border-gray-100 text-gray-500">Nenhum dado processado.</div> ) : (
+          <div className="w-full animate-fade-in pb-10">
+            <SecaoHeader titulo="Malha Fina (Cancelados)" icone={Ban} descricao="Transparência total. Separamos e isolamos todos os pedidos marcados como Cancelados ou Devolvidos para não inflar artificialmente o seu painel de vendas brutas. Você pode conferir cada um deles aqui." />
+            
+            {!resultados ? ( <div className="bg-white rounded-3xl p-16 text-center border border-gray-100 text-gray-400 font-medium">Faça uma auditoria primeiro para visualizar.</div> ) : (
               <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden w-full max-h-[70vh]">
+                <div className="p-4 border-b border-gray-100 bg-gray-50 flex justify-end gap-2">
+                  {resultados.cancelados.length > 0 && (
+                     <>
+                        <button onClick={() => exportarExcel(resultados.cancelados, "Cancelados_Isolados")} className="bg-white text-green-700 border border-gray-200 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 hover:bg-green-50 transition-colors"><Download size={16}/> Baixar Excel</button>
+                        <button onClick={() => exportarPDF(resultados.cancelados, "Relatório de Pedidos Cancelados ou Devolvidos", "Cancelados_Isolados")} className="bg-white text-red-700 border border-gray-200 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 hover:bg-red-50 transition-colors"><FileJson size={16}/> Gerar PDF</button>
+                     </>
+                   )}
+                </div>
                 <div className="overflow-y-auto h-full p-0">
                   <table className="w-full text-left border-collapse">
-                    <thead className="bg-gray-100 text-gray-500 text-xs uppercase font-bold sticky top-0 z-10 shadow-sm">
-                      <tr><th className="p-4">ID do Pedido</th><th className="p-4">Status</th><th className="p-4 text-right">Valor Original de Referência</th></tr>
+                    <thead className="bg-white text-gray-400 text-[10px] uppercase font-black sticky top-0 shadow-sm">
+                      <tr><th className="p-5">ID do Pedido</th><th className="p-5">Status Upseller</th><th className="p-5 text-right">Valor Original de Referência</th></tr>
                     </thead>
                     <tbody className="text-sm">
                       {resultados.cancelados.map((item: any, idx: number) => (
-                        <tr key={idx} className="border-b border-gray-50 hover:bg-gray-50">
-                          <td className="p-4 font-mono font-bold text-gray-700">{item["ID do Pedido"]}</td>
-                          <td className="p-4 font-bold text-red-500">{item["Status"]}</td>
-                          <td className="p-4 text-right font-black text-gray-700">R$ {item["Valor Registrado"] ? item["Valor Registrado"].toFixed(2) : item["Valor de Referência (R$)"].toFixed(2)}</td>
+                        <tr key={idx} className="border-b border-gray-50 hover:bg-gray-50/80 transition-colors">
+                          <td className="p-5 font-mono font-bold text-gray-500">{item["ID do Pedido"]}</td>
+                          <td className="p-5"><span className="bg-gray-100 text-gray-600 px-3 py-1 rounded-full text-xs font-bold border border-gray-200">{item["Status"]}</span></td>
+                          <td className="p-5 text-right font-black text-gray-400 line-through">R$ {item["Valor Registrado"] ? item["Valor Registrado"].toFixed(2) : item["Valor de Referência (R$)"].toFixed(2)}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                  {resultados.cancelados.length === 0 && <p className="text-gray-400 text-center py-10">Lista vazia.</p>}
+                  {resultados.cancelados.length === 0 && <p className="text-gray-400 text-center py-16 font-medium">Nenhum pedido cancelado encontrado.</p>}
                 </div>
               </div>
             )}
@@ -574,31 +679,30 @@ export default function Dashboard({ session }: any) {
 
         {/* TAB 6: PRODUTOS */}
         {activeTab === 'produtos' && (
-          <div className="w-full animate-fade-in">
-            <header className="mb-8 flex justify-between items-end">
-              <div>
-                <h2 className="text-3xl font-black text-gray-900 tracking-tight">Meus Produtos & Custos</h2>
-                <p className="text-gray-500 mt-1">Os SKUs são extraídos automaticamente da sua planilha.</p>
-              </div>
-              <button onClick={carregarProdutos} className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-bold text-sm">Atualizar Lista</button>
-            </header>
+          <div className="w-full animate-fade-in pb-10">
+            <SecaoHeader titulo="Inteligência de Produtos" icone={Package} descricao="Cadastre os custos de fabricação/aquisição para descobrir sua lucratividade real. O sistema extrai e salva os SKUs automaticamente ao auditar relatórios." />
+            
             <div className="bg-white border border-gray-100 rounded-3xl shadow-sm overflow-hidden">
+               <div className="p-4 border-b border-gray-100 bg-gray-50 flex justify-end">
+                 <button onClick={carregarProdutos} className="bg-white text-gray-700 border border-gray-200 px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 hover:bg-gray-100 transition-colors">Atualizar Banco</button>
+               </div>
+               
                {meusProdutos.length === 0 ? (
-                 <div className="p-10 text-center text-gray-400">Nenhum produto cadastrado. Processe uma planilha na aba "Nova Auditoria".</div>
+                 <div className="p-16 text-center text-gray-400 font-medium">Nenhum produto cadastrado no banco. Suba uma planilha na aba "Nova Auditoria".</div>
                ) : (
-                 <div className="max-h-[65vh] overflow-y-auto p-0">
+                 <div className="max-h-[60vh] overflow-y-auto p-0">
                    <table className="w-full text-left">
-                     <thead className="bg-gray-50 text-gray-500 text-xs uppercase font-bold sticky top-0 z-10 shadow-sm">
-                       <tr><th className="p-4">SKU</th><th className="p-4 w-1/3">Produto</th><th className="p-4">Custo (R$)</th><th className="p-4">Agrupar c/ SKU</th><th className="p-4">Salvar</th></tr>
+                     <thead className="bg-white text-gray-400 text-[10px] uppercase font-black sticky top-0 shadow-sm">
+                       <tr><th className="p-5">Cód. SKU</th><th className="p-5 w-1/3">Nome do Produto</th><th className="p-5">Custo Unitário (R$)</th><th className="p-5">Agrupar Vendas (SKU Master)</th><th className="p-5">Ação</th></tr>
                      </thead>
                      <tbody className="text-sm">
                        {meusProdutos.map((prod) => (
-                         <tr key={prod.id} className="border-b border-gray-50 hover:bg-gray-50">
-                           <td className="p-4 font-mono font-bold text-gray-600">{prod.sku}</td>
-                           <td className="p-4 text-gray-600 truncate max-w-xs" title={prod.nome}>{prod.nome}</td>
-                           <td className="p-4"><input type="number" step="0.01" defaultValue={prod.custo} id={`custo-${prod.sku}`} className="w-24 bg-white border border-gray-300 rounded p-2 focus:border-[#F1C40F] outline-none" /></td>
-                           <td className="p-4"><input type="text" placeholder="SKU Master" defaultValue={prod.sku_master || ''} id={`master-${prod.sku}`} className="w-32 bg-white border border-gray-300 rounded p-2 focus:border-[#F1C40F] outline-none" /></td>
-                           <td className="p-4"><button onClick={() => { const custo = (document.getElementById(`custo-${prod.sku}`) as HTMLInputElement).value; const master = (document.getElementById(`master-${prod.sku}`) as HTMLInputElement).value; atualizarProduto(prod.sku, Number(custo), master); }} className="bg-green-100 text-green-700 p-2 rounded-lg hover:bg-green-200 transition-colors"><Save size={18}/></button></td>
+                         <tr key={prod.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                           <td className="p-5 font-mono font-bold text-gray-800 bg-gray-50/50">{prod.sku}</td>
+                           <td className="p-5 text-gray-600 truncate max-w-xs font-medium" title={prod.nome}>{prod.nome}</td>
+                           <td className="p-5"><input type="number" step="0.01" defaultValue={prod.custo} id={`custo-${prod.sku}`} className="w-32 bg-white border-2 border-gray-200 rounded-xl p-3 focus:border-[#10b981] focus:ring-4 focus:ring-green-50 outline-none font-bold text-gray-800 transition-all" /></td>
+                           <td className="p-5"><input type="text" placeholder="Ex: SKU-BASE" defaultValue={prod.sku_master || ''} id={`master-${prod.sku}`} className="w-40 bg-white border-2 border-gray-200 rounded-xl p-3 focus:border-[#10b981] focus:ring-4 focus:ring-green-50 outline-none font-bold text-gray-800 transition-all text-xs" /></td>
+                           <td className="p-5"><button onClick={() => { const custo = (document.getElementById(`custo-${prod.sku}`) as HTMLInputElement).value; const master = (document.getElementById(`master-${prod.sku}`) as HTMLInputElement).value; atualizarProduto(prod.sku, Number(custo), master); }} className="bg-[#10b981] text-white p-3 rounded-xl hover:bg-emerald-600 hover:shadow-lg hover:-translate-y-1 transition-all"><Save size={18}/></button></td>
                          </tr>
                        ))}
                      </tbody>
@@ -611,25 +715,29 @@ export default function Dashboard({ session }: any) {
 
         {/* TAB 7: LUCRATIVIDADE */}
         {activeTab === 'lucro' && (
-          <div className="w-full animate-fade-in">
-            <header className="mb-8">
-              <h2 className="text-3xl font-black text-gray-900 tracking-tight">DRE & Lucratividade</h2>
-              <p className="text-gray-500 mt-1">Cálculo de Lucro Líquido (Baseado nos repasses recebidos menos os custos cadastrados).</p>
-            </header>
-            {!resultados ? ( <div className="bg-white rounded-3xl shadow-sm p-12 text-center border border-gray-100 text-gray-500">Faça uma auditoria primeiro para gerar o DRE.</div> ) : (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-                  <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Valor Real de Venda</p>
-                  <p className="text-2xl font-black text-gray-900">R$ {resultados.valorBruto.toLocaleString('pt-BR', {minimumFractionDigits:2})}</p>
+          <div className="w-full animate-fade-in pb-10">
+            <SecaoHeader titulo="DRE & Lucratividade Real" icone={LineChart} descricao="A verdade crua sobre o seu negócio. Cruzamos os repasses confirmados, removemos as taxas e divergências, e subtraímos o custo dos produtos para revelar o que sobrou no seu bolso." />
+            
+            {!resultados ? ( <div className="bg-white rounded-3xl p-16 text-center border border-gray-100 text-gray-400 font-medium">Faça uma auditoria primeiro para gerar o DRE.</div> ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                
+                <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-24 h-24 bg-gray-50 rounded-bl-full -mr-4 -mt-4"></div>
+                  <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2 relative z-10">Valor Real Vendido</p>
+                  <p className="text-4xl font-black text-gray-900 relative z-10">R$ {resultados.valorBruto.toLocaleString('pt-BR', {minimumFractionDigits:2})}</p>
                 </div>
-                <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-                  <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Custo dos Produtos</p>
-                  <p className="text-2xl font-black text-orange-500">R$ {resultados.custoTotal.toLocaleString('pt-BR', {minimumFractionDigits:2})}</p>
+                
+                <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-24 h-24 bg-orange-50 rounded-bl-full -mr-4 -mt-4"></div>
+                  <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2 relative z-10">Custo dos Produtos</p>
+                  <p className="text-4xl font-black text-orange-500 relative z-10">- R$ {resultados.custoTotal.toLocaleString('pt-BR', {minimumFractionDigits:2})}</p>
                 </div>
-                <div className="bg-[#10b981] p-6 rounded-3xl shadow-sm text-white relative overflow-hidden">
-                   <div className="absolute top-0 right-0 w-24 h-24 bg-white opacity-10 rounded-full -mr-10 -mt-10"></div>
-                   <p className="text-xs font-bold uppercase tracking-widest mb-2 opacity-90">Lucro Líquido Real</p>
-                   <p className="text-3xl font-black">R$ {resultados.lucroLiquido.toLocaleString('pt-BR', {minimumFractionDigits:2})}</p>
+                
+                <div className="bg-gradient-to-br from-[#10b981] to-emerald-600 p-8 rounded-3xl shadow-xl text-white relative overflow-hidden hover:scale-105 transition-transform cursor-default">
+                   <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full blur-2xl -mr-10 -mt-10"></div>
+                   <div className="absolute bottom-0 left-0 w-24 h-24 bg-black opacity-10 rounded-tr-full -ml-4 -mb-4"></div>
+                   <p className="text-xs font-black uppercase tracking-widest mb-2 opacity-90 relative z-10">Lucro Líquido no Bolso</p>
+                   <p className="text-5xl font-black relative z-10">R$ {resultados.lucroLiquido.toLocaleString('pt-BR', {minimumFractionDigits:2})}</p>
                 </div>
               </div>
             )}
