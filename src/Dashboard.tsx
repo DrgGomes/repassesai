@@ -7,7 +7,7 @@ import {
   PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, Legend 
 } from 'recharts';
 import { 
-  LayoutDashboard, UploadCloud, Hourglass, Download, FileSpreadsheet, AlertTriangle, Loader2, Database, LogOut, FileJson, Ban, Package, LineChart, Save, Trash2, Archive, CheckCircle2, Search, ShieldCheck, Check, ChevronDown, Smartphone, ShoppingBag, Video, Store
+  LayoutDashboard, UploadCloud, Hourglass, Download, FileSpreadsheet, AlertTriangle, Loader2, Database, LogOut, FileJson, Ban, Package, LineChart, Save, Trash2, Archive, CheckCircle2, Search, ShieldCheck, Check, Smartphone, ShoppingBag, Video, Store
 } from 'lucide-react';
 
 // COMPONENTE DE BALÃO EXPLICATIVO (TOOLTIP) AMIGÁVEL
@@ -24,7 +24,6 @@ const Tooltip = ({ children, texto }: { children: React.ReactNode, texto: string
 export default function Dashboard({ session }: any) {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [marketplace, setMarketplace] = useState('kwai'); 
-  const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({ kwai: true }); 
 
   const [isSyncing, setIsSyncing] = useState(false);
   const [isF5Loading, setIsF5Loading] = useState(true);
@@ -369,10 +368,6 @@ export default function Dashboard({ session }: any) {
     setActiveTab(tab);
   };
 
-  const toggleMenu = (menu: string) => {
-    setOpenMenus(prev => ({ ...prev, [menu]: !prev[menu] }));
-  };
-
   if (isF5Loading) return <div className="h-screen w-full flex items-center justify-center bg-[#f8fafc]"><Loader2 className="animate-spin text-[#F1C40F]" size={48} /></div>;
 
   const SecaoHeader = ({ titulo, icone: Icon, descricao }: any) => (
@@ -391,7 +386,7 @@ export default function Dashboard({ session }: any) {
   return (
     <div className="flex h-screen w-full bg-[#f8fafc] text-gray-800 font-sans overflow-hidden selection:bg-[#F1C40F] selection:text-black">
       
-      {/* SIDEBAR MODULAR (ESCURA COM TOQUE AMARELO) */}
+      {/* SIDEBAR MODULAR */}
       <div className="w-72 bg-[#111827] flex-shrink-0 flex flex-col justify-between overflow-y-auto border-r border-gray-800 scrollbar-hide shadow-xl z-20 relative">
         <div className="p-5">
           <div className="flex items-center gap-3 mb-8 px-2 mt-2">
@@ -442,7 +437,7 @@ export default function Dashboard({ session }: any) {
           <div className="h-px bg-gray-800 my-6 mx-2"></div>
           <p className="text-[11px] uppercase tracking-widest text-gray-500 font-bold mb-3 ml-2">Configurações Gerais</p>
           <nav className="space-y-2">
-            <button onClick={() => handleMenuClick('global', 'produtos')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold transition-all ${activeTab === 'produtos' ? 'bg-[#10b981] text-white shadow-lg' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}><Package size={18}/> Custos de Produtos</button>
+            <button onClick={() => { setMarketplace('global'); setActiveTab('produtos'); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold transition-all ${activeTab === 'produtos' ? 'bg-[#10b981] text-white shadow-lg' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}><Package size={18}/> Custos de Produtos</button>
           </nav>
         </div>
         <div className="p-5 border-t border-gray-800">
@@ -538,14 +533,7 @@ export default function Dashboard({ session }: any) {
             
             {activeTab === 'dashboard' && !resultados && (
               <div className="w-full animate-fade-in max-w-5xl mx-auto flex flex-col items-center justify-center min-h-[80vh] relative">
-                <div className="absolute top-6 right-6">
-                   <button onClick={apagarTudo} className="flex items-center gap-2 text-sm font-bold text-red-600 bg-white border border-red-100 shadow-sm hover:bg-red-50 px-5 py-2.5 rounded-xl transition-colors"><Trash2 size={16}/> Limpar Instância</button>
-                </div>
-                
-                <div className="bg-[#F1C40F]/20 p-6 rounded-full shadow-lg mb-8">
-                  <ShieldCheck size={56} className="text-yellow-600" />
-                </div>
-                
+                <div className="bg-[#F1C40F]/20 p-6 rounded-full shadow-lg mb-8"><ShieldCheck size={56} className="text-yellow-600" /></div>
                 <h2 className="text-4xl font-black text-gray-900 tracking-tight text-center mb-6">Conferência Inteligente (Kwai)</h2>
                 <p className="text-gray-500 text-center max-w-2xl mb-12 text-lg font-medium leading-relaxed">
                   Chega de planilhas confusas. Nós cruzamos suas vendas da UPSeller com os pagamentos da Kwai e mostramos exatamente onde está o seu dinheiro.

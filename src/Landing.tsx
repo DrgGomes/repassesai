@@ -1,4 +1,4 @@
-import { ArrowRight, ShieldCheck, Database, FileJson, LineChart, Search, Lock, Zap, FileSpreadsheet, Package, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { ArrowRight, ShieldCheck, FileJson, LineChart, Search, Lock, AlertTriangle, CheckCircle2, Download, Package, Zap } from 'lucide-react';
 
 export default function Landing({ onLoginClick }: { onLoginClick: () => void }) {
   return (
@@ -119,6 +119,7 @@ export default function Landing({ onLoginClick }: { onLoginClick: () => void }) 
           </div>
 
           <div className="md:col-span-2 bg-gradient-to-br from-zinc-900 to-[#09090b] border border-zinc-800 rounded-3xl p-10 relative overflow-hidden group hover:border-emerald-900/50 transition-colors">
+            <div className="absolute bottom-0 right-0 w-full h-1/2 bg-gradient-to-t from-emerald-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
             <div className="flex justify-between items-start relative z-10">
               <div>
                 <LineChart className="text-emerald-500 mb-6" size={40}/>
@@ -130,17 +131,66 @@ export default function Landing({ onLoginClick }: { onLoginClick: () => void }) 
         </div>
       </section>
 
-      {/* CTA SECTION */}
+      {/* COMO FUNCIONA (STEPS) */}
+      <section className="py-20 border-t border-zinc-800/50 bg-[#09090b]">
+        <div className="max-w-7xl mx-auto px-6">
+          <h2 className="text-3xl md:text-4xl font-black tracking-tight text-center text-white mb-20">Três passos para recuperar sua paz.</h2>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-12 relative">
+             <div className="hidden md:block absolute top-10 left-[15%] right-[15%] h-0.5 bg-gradient-to-r from-zinc-800 via-zinc-600 to-zinc-800"></div>
+
+             <div className="relative flex flex-col items-center text-center z-10">
+                <div className="w-20 h-20 bg-zinc-900 border-2 border-zinc-700 rounded-2xl flex items-center justify-center mb-6 shadow-xl text-zinc-400">
+                   <Package size={32}/>
+                </div>
+                <h3 className="text-xl font-black text-white mb-3">1. Suba os Relatórios</h3>
+                <p className="text-zinc-500 font-medium text-sm px-4">Exporte os relatórios originais da logística e do financeiro e arraste para o sistema. Sem precisar formatar nada.</p>
+             </div>
+
+             <div className="relative flex flex-col items-center text-center z-10">
+                <div className="w-20 h-20 bg-[#F1C40F] border-2 border-[#d4ac0d] rounded-2xl flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(241,196,15,0.3)] text-[#09090b] transform scale-110">
+                   <Zap size={32}/>
+                </div>
+                <h3 className="text-xl font-black text-white mb-3">2. A Inteligência Trabalha</h3>
+                <p className="text-zinc-500 font-medium text-sm px-4">O Motor Forense cruza milhares de IDs em segundos, abate os custos corretamente e encontra os buracos no repasse.</p>
+             </div>
+
+             <div className="relative flex flex-col items-center text-center z-10">
+                <div className="w-20 h-20 bg-zinc-900 border-2 border-zinc-700 rounded-2xl flex items-center justify-center mb-6 shadow-xl text-zinc-400">
+                   <Download size={32}/>
+                </div>
+                <h3 className="text-xl font-black text-white mb-3">3. Cobre o Suporte</h3>
+                <p className="text-zinc-500 font-medium text-sm px-4">Baixe a planilha de Divergências contendo o Valor Esperado e o Valor Pago, e abra um ticket na hora com a plataforma.</p>
+             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA / PRICING */}
       <section id="planos" className="py-32 px-6 max-w-5xl mx-auto">
         <div className="bg-gradient-to-b from-zinc-900 to-[#09090b] border border-zinc-800 rounded-[3rem] p-12 text-center relative overflow-hidden">
+          <div className="absolute inset-0 bg-[#F1C40F] opacity-[0.03]"></div>
           <Lock className="mx-auto text-zinc-600 mb-6" size={48}/>
           <h2 className="text-3xl md:text-5xl font-black tracking-tight text-white mb-6 relative z-10">Um investimento que <br/> se paga na primeira auditoria.</h2>
           <p className="text-zinc-400 text-lg font-medium mb-10 max-w-xl mx-auto relative z-10">Vendedores perdem de 2% a 5% do faturamento em taxas silenciosas. Nossa ferramenta recupera isso para você.</p>
-          <button onClick={onLoginClick} className="bg-[#F1C40F] hover:bg-[#d4ac0d] text-[#09090b] px-10 py-5 rounded-2xl text-lg font-black transition-all hover:scale-105 relative z-10">
+          
+          <button onClick={onLoginClick} className="bg-[#F1C40F] hover:bg-[#d4ac0d] text-[#09090b] px-10 py-5 rounded-2xl text-lg font-black transition-all shadow-[0_0_30px_rgba(241,196,15,0.3)] hover:scale-105 relative z-10">
             Criar Minha Conta Agora
           </button>
+          <p className="text-zinc-600 mt-6 text-sm font-semibold relative z-10 flex items-center justify-center gap-2">
+            <CheckCircle2 size={16} className="text-green-500"/> Cancele quando quiser. Dados 100% criptografados.
+          </p>
         </div>
       </section>
+
+      {/* FOOTER */}
+      <footer className="border-t border-zinc-800/50 py-10 bg-[#09090b] text-center">
+         <div className="flex items-center justify-center gap-2 mb-6">
+            <ShieldCheck size={20} className="text-[#F1C40F]" />
+            <span className="text-lg font-black tracking-widest text-white">REPASSE<span className="text-[#F1C40F]">.AI</span></span>
+          </div>
+          <p className="text-zinc-600 text-xs font-medium">© 2026 Repasse.AI — A primeira auditoria forense de e-commerce do Brasil.</p>
+      </footer>
 
     </div>
   );
