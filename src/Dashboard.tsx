@@ -46,7 +46,7 @@ export default function Dashboard({ session }: any) {
       setIsF5Loading(false);
     };
     carregarTudo();
-  }, [marketplace]); // Recarrega do banco ao trocar de marketplace
+  }, [marketplace]);
 
   const carregarProdutos = async () => {
     const { data } = await supabase.from('produtos').select('*').eq('user_id', session.user.id);
@@ -54,9 +54,8 @@ export default function Dashboard({ session }: any) {
   };
 
   const carregarDashboardDoBanco = async () => {
-    // Escolhe a tabela baseada no marketplace ativo
     const tabela = marketplace === 'tiktok' ? 'pedidos_tiktok' : 'pedidos_kwai';
-    const { data: dbOrders } = await supabase.from(tabela).select('*').eq('user_id', session.user.id).catch(() => ({ data: [] }));
+    const { data: dbOrders } = await supabase.from(tabela).select('*').eq('user_id', session.user.id);
     
     if (!dbOrders || dbOrders.length === 0) {
       setResultados(null);
@@ -66,7 +65,7 @@ export default function Dashboard({ session }: any) {
     let atrasados: any[] = [], divergencias: any[] = [], noPrazo: any[] = [], corretos: any[] = [], cancelados: any[] = [], amostras: any[] = [], divergenciasPreco: any[] = [];
     let valorBruto = 0, totalRetido = 0, custoTotal = 0, lucroLiquido = 0;
 
-    dbOrders.forEach(order => {
+    dbOrders.forEach((order: any) => {
        if (order.status === 'CANCELADO_DEVOLVIDO' || order.status === 'REEMBOLSO') {
            cancelados.push({ "ID do Pedido": order.id_pedido, "Status": order.status, "Valor de Face": Number(order.valor_bruto) });
        } else if (order.status === 'POSSIVEL_AMOSTRA' || order.status === 'AMOSTRA_CONFIRMADA') {
@@ -120,7 +119,7 @@ export default function Dashboard({ session }: any) {
 
   const exportarBackupGeral = async () => {
     const tabela = marketplace === 'tiktok' ? 'pedidos_tiktok' : 'pedidos_kwai';
-    const { data: dbOrders } = await supabase.from(tabela).select('*').eq('user_id', session.user.id).catch(() => ({ data: [] }));
+    const { data: dbOrders } = await supabase.from(tabela).select('*').eq('user_id', session.user.id);
     if (!dbOrders || dbOrders.length === 0) return alert("Não há dados salvos ainda.");
     const worksheet = XLSX.utils.json_to_sheet(dbOrders);
     const workbook = XLSX.utils.book_new();
@@ -132,7 +131,7 @@ export default function Dashboard({ session }: any) {
     if (!window.confirm(`Certeza absoluta? Isso vai apagar todos os resultados da sua auditoria atual de ${marketplace.toUpperCase()}. Quer recomeçar?`)) return;
     setIsF5Loading(true);
     const tabela = marketplace === 'tiktok' ? 'pedidos_tiktok' : 'pedidos_kwai';
-    await supabase.from(tabela).delete().eq('user_id', session.user.id).catch(() => {});
+    await supabase.from(tabela).delete().eq('user_id', session.user.id);
     setResultados(null);
     setIsF5Loading(false);
   };
@@ -183,13 +182,12 @@ export default function Dashboard({ session }: any) {
     return chave ? row[chave] : null;
   };
 
-  // MOTOR MULTI-PLATAFORMA
   const executarConciliacao = async () => {
     const finData = marketplace === 'tiktok' ? tiktokData : kwaiData;
     if (upsellerData.length === 0 && finData.length === 0) return alert(`⚠️ Suba as planilhas da UPSeller e da ${marketplace.toUpperCase()} primeiro.`);
     setIsSyncing(true);
 
-    const tol = 0.02; // Tolerância de 2 centavos
+    const tol = 0.02; 
     const produtosExtraidos = new Map();
     upsellerData.forEach(row => {
       const sku = extrair(row, ['sku', 'especificação', 'código']);
@@ -206,9 +204,9 @@ export default function Dashboard({ session }: any) {
     meusProdutos.forEach(p => mapaCustos.set(p.sku, p));
 
     const tabela = marketplace === 'tiktok' ? 'pedidos_tiktok' : 'pedidos_kwai';
-    const { data: dbOrders } = await supabase.from(tabela).select('*').eq('user_id', session.user.id).catch(() => ({ data: [] }));
+    const { data: dbOrders } = await supabase.from(tabela).select('*').eq('user_id', session.user.id);
     const orderMap = new Map();
-    if (dbOrders) dbOrders.forEach(o => orderMap.set(o.id_pedido, o));
+    if (dbOrders) dbOrders.forEach((o: any) => orderMap.set(o.id_pedido, o));
 
     let maxDataFinanceiro = new Date(0);
     finData.forEach(r => {
@@ -217,7 +215,6 @@ export default function Dashboard({ session }: any) {
     });
     if (maxDataFinanceiro.getTime() === 0) maxDataFinanceiro = new Date(); 
 
-    // CAMADA 1: LOGÍSTICA (UPSeller)
     upsellerData.forEach(row => {
       const idPedido = String(extrair(row, ['nº de pedido da plataforma', 'nº de pedido', 'order id']) || '').trim();
       if (!idPedido) return;
@@ -243,8 +240,7 @@ export default function Dashboard({ session }: any) {
     let valorBrutoGeral = 0, totalDiferencas = 0, custoTotalGeral = 0, lucroLiquidoGeral = 0;
     const jsonAuditExport: any[] = [];
 
-    // CAMADAS 2 AO 8: AUDITORIA FORENSE
-    Array.from(orderMap.values()).forEach(order => {
+    Array.from(orderMap.values()).forEach((order: any) => {
        const finRow = finData.find(r => String(extrair(r, ['número do pedido', 'pedido', 'id', 'id do pedido/ajuste'])).trim().includes(order.id_pedido));
        
        let auditObj: any = { pedido_id: order.id_pedido, upseller: { valor_total_produtos: order.valor_bruto, quantidade_itens: order.qtd }, financeiro: null, calculo: null, classificacao: { status: order.status } };
@@ -272,7 +268,6 @@ export default function Dashboard({ session }: any) {
 
        let valorRealVenda = 0, repasseEsperado = 0, diferenca = 0, repasseLiquidado = 0, baseReport: any = {};
 
-       // --- LÓGICA TIKTOK ---
        if (marketplace === 'tiktok') {
            valorRealVenda = Number(extrair(finRow, ['vendas líquidas dos produtos'])) || order.valor_bruto;
            repasseLiquidado = Number(extrair(finRow, ['valor total a ser liquidado'])) || 0;
@@ -294,7 +289,6 @@ export default function Dashboard({ session }: any) {
 
            const sfp = Math.abs(Number(extrair(finRow, ['taxa de serviço do sfp'])) || 0);
            const afiliado = Math.abs(Number(extrair(finRow, ['comissões de afiliados'])) || 0);
-           const freteCliente = Number(extrair(finRow, ['custo do frete'])) || 0; 
            
            repasseEsperado = valorRealVenda - taxaComissaoEsperada - taxaFixaEsperada - sfp - afiliado;
            diferenca = repasseEsperado - repasseLiquidado;
@@ -312,9 +306,7 @@ export default function Dashboard({ session }: any) {
               "O que pagaram": Number(repasseLiquidado.toFixed(2)),
               "Falta Pagar": Number(diferenca.toFixed(2))
            };
-       } 
-       // --- LÓGICA KWAI ---
-       else {
+       } else {
            const precoKwai = Number(extrair(finRow, ['preço do produto', 'preço'])) || 0;
            const subvencaoComercial = Number(extrair(finRow, ['subvenção ao comércio de mercadorias'])) || 0; 
            const freteCobradoVendedor = Number(extrair(finRow, ['frete pago pelo vendedor'])) || 0;
@@ -397,7 +389,7 @@ export default function Dashboard({ session }: any) {
 
     try {
       for (let i = 0; i < Array.from(orderMap.values()).length; i += 500) {
-        await supabase.from(tabela).upsert(Array.from(orderMap.values()).slice(i, i + 500), { onConflict: 'user_id,id_pedido' }).catch(() => {});
+        await supabase.from(tabela).upsert(Array.from(orderMap.values()).slice(i, i + 500), { onConflict: 'user_id,id_pedido' });
       }
     } catch (e) {}
 
@@ -504,7 +496,7 @@ export default function Dashboard({ session }: any) {
               )}
             </div>
 
-            {/* SHOPEE / MELI (EM BREVE) */}
+            {/* SHOPEE / MELI */}
             <button onClick={() => handleMenuClick('shopee', 'em_breve')} className="bg-transparent border border-gray-800 w-full flex items-center justify-between p-4 text-sm font-bold text-gray-500 hover:bg-gray-900/50 rounded-2xl transition-colors">
                <div className="flex items-center gap-3"><ShoppingBag size={18} className="text-gray-600"/> Shopee </div><span className="bg-gray-800 text-[9px] uppercase tracking-wider text-gray-400 px-2 py-1 rounded-md font-black">Em breve</span>
             </button>
@@ -525,7 +517,6 @@ export default function Dashboard({ session }: any) {
 
       <div className="flex-1 h-full overflow-y-auto p-10 relative">
         
-        {/* VIEW GLOBAL: PRODUTOS */}
         {activeTab === 'produtos' && (
           <div className="w-full animate-fade-in max-w-6xl mx-auto pb-10">
             <SecaoHeader titulo="Seus Custos e Produtos" icone={Package} descricao="Cadastre quanto custou cada produto para você. Isso serve para calcularmos o seu lucro líquido em todas as plataformas." />
@@ -554,7 +545,6 @@ export default function Dashboard({ session }: any) {
           </div>
         )}
 
-        {/* VIEW: MÓDULOS EM BREVE (SHOPEE, MELI) */}
         {activeTab === 'em_breve' && (
            <div className="flex flex-col items-center justify-center min-h-[70vh] text-center animate-fade-in">
              <div className="bg-white border border-gray-200 p-8 rounded-full shadow-lg mb-8 relative">
@@ -567,7 +557,6 @@ export default function Dashboard({ session }: any) {
            </div>
         )}
 
-        {/* VIEWS: KWAI OU TIKTOK (RENDERIZAÇÃO DINÂMICA) */}
         {activeTab !== 'produtos' && activeTab !== 'em_breve' && (marketplace === 'kwai' || marketplace === 'tiktok') && (
           <>
             {activeTab === 'dashboard' && resultados && (
@@ -736,7 +725,7 @@ export default function Dashboard({ session }: any) {
               </div>
             )}
 
-            {activeTab === 'amostras' && marketplace === 'kwai' && (
+            {activeTab === 'amostras' && (
               <div className="w-full animate-fade-in max-w-5xl mx-auto pb-10">
                 <SecaoHeader titulo="Amostras & Casos Estranhos" icone={Search} descricao="Pedidos que resultaram em valores muito baixos ou divergência entre ERP e plataforma." />
                 {!resultados ? ( <div className="bg-white border border-gray-200 rounded-3xl p-16 text-center text-lg font-bold text-gray-400">Auditoria não inicializada.</div> ) : (
@@ -833,7 +822,7 @@ export default function Dashboard({ session }: any) {
                       <table className="w-full text-left text-sm"><thead className="bg-gray-50 text-gray-500 sticky top-0 border-b border-gray-100 font-bold uppercase text-[11px] tracking-wider"><tr><th className="p-5">ID do Pedido</th><th className="p-5">Situação</th><th className="p-5 text-right">Valor Original (Base)</th></tr></thead>
                         <tbody className="divide-y divide-gray-100">
                           {resultados.cancelados.map((item: any, idx: number) => (
-                            <tr key={idx} className="hover:bg-gray-50 transition-colors"><td className="p-5 font-mono text-xs font-bold text-gray-600">{item["ID do Pedido"]}</td><td className="p-5"><span className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold uppercase bg-gray-100 text-gray-600 border border-gray-200">{item["Status"] || item["Status UPSeller"]}</span></td><td className="p-5 text-right font-black text-gray-400 line-through">R$ {item["Valor Original"]?.toFixed(2) || item["Valor UPSeller Base"]?.toFixed(2) || item["Valor de Face"]?.toFixed(2) || '0.00'}</td></tr>
+                            <tr key={idx} className="hover:bg-gray-50 transition-colors"><td className="p-5 font-mono text-xs font-bold text-gray-600">{item["ID do Pedido"]}</td><td className="p-5"><span className="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-bold uppercase bg-gray-100 text-gray-600 border border-gray-200">{item["Status"] || item["Status UPSeller"]}</span></td><td className="p-5 text-right font-black text-gray-400 line-through">R$ {item["Valor Original"]?.toFixed(2) || item["Valor UPSeller Base"]?.toFixed(2) || item["Valor Registrado"]?.toFixed(2) || '0.00'}</td></tr>
                           ))}
                         </tbody>
                       </table>
