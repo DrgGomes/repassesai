@@ -5,7 +5,7 @@ import { supabase } from './supabase';
 import { formatCentsToBRL, generateSchedules } from './lib/finance';
 import { 
   Plus, ArrowUpCircle, ArrowDownCircle, Calendar, Paperclip, TrendingUp,
-  AlertCircle, Loader2, LayoutDashboard, X, Check, Package, Users, Tag, Calculator
+  AlertCircle, Loader2, X, Check, Package, Users, Tag, Calculator
 } from 'lucide-react';
 
 export default function FluxoCaixaView() {
@@ -91,7 +91,7 @@ export default function FluxoCaixaView() {
       const totalCents = BigInt(unitCents * parseInt(quantity));
       const { data: { user } } = await supabase.auth.getUser();
       
-      if (!user) throw new Error("Sessão expirada. Faça login novamente.");
+      if (!user) throw new Error("Sessão expirada.");
 
       const { data: entry, error: entryError } = await supabase
         .from('financial_entries')
@@ -100,7 +100,7 @@ export default function FluxoCaixaView() {
           total_amount_cents: totalCents,
           unit_value_cents: BigInt(unitCents),
           quantity: parseInt(quantity),
-          type: type, // Forçando o envio do campo type
+          type: type,
           entry_date: entryDate,
           product_id: selectedProduct || null,
           supplier_id: selectedSupplier || null,
@@ -129,10 +129,17 @@ export default function FluxoCaixaView() {
     setInstallments(1);
   }
 
-  if (loading) return <div className="h-full w-full flex items-center justify-center bg-[#09090b]"><Loader2 className="animate-spin text-[#F1C40F]" size={48} /></div>;
+  if (loading) return (
+    <div className="h-full w-full flex flex-col items-center justify-center bg-[#09090b] space-y-4">
+      <Loader2 className="animate-spin text-[#F1C40F]" size={48} />
+      <p className="text-zinc-500 font-black uppercase tracking-[0.2em] text-[10px]">Sincronizando Tesouraria...</p>
+    </div>
+  );
 
   return (
     <div className="max-w-[1400px] mx-auto space-y-8 animate-in fade-in duration-700 pb-20">
+      
+      {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[#09090b] p-8 rounded-[2.5rem] border border-zinc-800/50 shadow-2xl">
         <div className="space-y-1">
           <h1 className="text-5xl font-black tracking-tighter uppercase italic leading-none">
@@ -140,11 +147,15 @@ export default function FluxoCaixaView() {
           </h1>
           <p className="text-zinc-500 text-sm font-medium">Gestão profissional de entradas, saídas e parcelamentos.</p>
         </div>
-        <button className="bg-[#F1C40F] hover:bg-[#d4ac0d] text-[#09090b] font-black px-10 py-5 rounded-2xl flex items-center gap-3 transition-all transform hover:scale-105 shadow-xl" onClick={() => setIsModalOpen(true)}>
-          <Plus className="w-6 h-6 stroke-[4px]" /> NOVO LANÇAMENTO
+        <button 
+          className="bg-[#F1C40F] hover:bg-[#d4ac0d] text-[#09090b] font-black px-10 py-5 rounded-2xl flex items-center gap-3 transition-all transform hover:scale-105 shadow-xl"
+          onClick={() => setIsModalOpen(true)}
+        >
+          <Plus className="w-6 h-6 stroke-[4px]" /> <span className="tracking-widest">NOVO LANÇAMENTO</span>
         </button>
       </div>
 
+      {/* CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
           { label: 'Entradas Hoje', val: stats.in, color: 'text-emerald-500', bg: 'border-emerald-500/20', Icon: ArrowUpCircle },
@@ -164,6 +175,7 @@ export default function FluxoCaixaView() {
         </div>
       </div>
 
+      {/* TABELA */}
       <div className="bg-zinc-900/20 border border-zinc-800/50 rounded-[2.5rem] overflow-hidden shadow-2xl">
         <div className="p-6 border-b border-zinc-800/50 bg-zinc-900/40 flex items-center gap-3">
           <Calendar className="w-5 h-5 text-[#F1C40F]" />
@@ -214,6 +226,7 @@ export default function FluxoCaixaView() {
         </div>
       </div>
 
+      {/* MODAL DETALHADO */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/95 backdrop-blur-md animate-in fade-in duration-300">
           <div className="bg-zinc-900 border border-zinc-800 w-full max-w-3xl rounded-[3rem] shadow-2xl overflow-hidden">
