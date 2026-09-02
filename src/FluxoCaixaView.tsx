@@ -16,7 +16,6 @@ export default function FluxoCaixaView() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Estados do Formulário
   const [description, setDescription] = useState('');
   const [type, setType] = useState<'INCOME' | 'EXPENSE'>('EXPENSE');
   const [selectedProduct, setSelectedProduct] = useState('');
@@ -87,7 +86,7 @@ export default function FluxoCaixaView() {
     e.preventDefault();
     setIsSaving(true);
     try {
-      const unitCents = Math.round(parseFloat(unitValue.replace(',', '.')) * 100);
+      const unitCents = Math.round(parseFloat(unitValue.replace(',', '.') || '0') * 100);
       const totalCents = BigInt(unitCents * parseInt(quantity));
       const { data: { user } } = await supabase.auth.getUser();
       
@@ -102,6 +101,7 @@ export default function FluxoCaixaView() {
           quantity: parseInt(quantity),
           type: type,
           entry_date: entryDate,
+          accrual_date: entryDate, // Preenchendo o campo que causou o erro
           product_id: selectedProduct || null,
           supplier_id: selectedSupplier || null,
           user_id: user.id
@@ -132,30 +132,24 @@ export default function FluxoCaixaView() {
   if (loading) return (
     <div className="h-full w-full flex flex-col items-center justify-center bg-[#09090b] space-y-4">
       <Loader2 className="animate-spin text-[#F1C40F]" size={48} />
-      <p className="text-zinc-500 font-black uppercase tracking-[0.2em] text-[10px]">Sincronizando Tesouraria...</p>
+      <p className="text-zinc-500 font-black uppercase tracking-[0.2em] text-[10px]">Sincronizando...</p>
     </div>
   );
 
   return (
     <div className="max-w-[1400px] mx-auto space-y-8 animate-in fade-in duration-700 pb-20">
-      
-      {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[#09090b] p-8 rounded-[2.5rem] border border-zinc-800/50 shadow-2xl">
         <div className="space-y-1">
           <h1 className="text-5xl font-black tracking-tighter uppercase italic leading-none">
-            <span className="text-white">Fluxo de</span> <span className="text-[#F1C40F]">Caixa</span>
+            <span className="text-zinc-200">Fluxo de</span> <span className="text-[#F1C40F]">Caixa</span>
           </h1>
-          <p className="text-zinc-500 text-sm font-medium">Gestão profissional de entradas, saídas e parcelamentos.</p>
+          <p className="text-zinc-500 text-sm font-medium">Gestão profissional de entradas e saídas.</p>
         </div>
-        <button 
-          className="bg-[#F1C40F] hover:bg-[#d4ac0d] text-[#09090b] font-black px-10 py-5 rounded-2xl flex items-center gap-3 transition-all transform hover:scale-105 shadow-xl"
-          onClick={() => setIsModalOpen(true)}
-        >
+        <button className="bg-[#F1C40F] hover:bg-[#d4ac0d] text-[#09090b] font-black px-10 py-5 rounded-2xl flex items-center gap-3 transition-all transform hover:scale-105 shadow-xl" onClick={() => setIsModalOpen(true)}>
           <Plus className="w-6 h-6 stroke-[4px]" /> <span className="tracking-widest">NOVO LANÇAMENTO</span>
         </button>
       </div>
 
-      {/* CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
           { label: 'Entradas Hoje', val: stats.in, color: 'text-emerald-500', bg: 'border-emerald-500/20', Icon: ArrowUpCircle },
@@ -175,7 +169,6 @@ export default function FluxoCaixaView() {
         </div>
       </div>
 
-      {/* TABELA */}
       <div className="bg-zinc-900/20 border border-zinc-800/50 rounded-[2.5rem] overflow-hidden shadow-2xl">
         <div className="p-6 border-b border-zinc-800/50 bg-zinc-900/40 flex items-center gap-3">
           <Calendar className="w-5 h-5 text-[#F1C40F]" />
@@ -226,12 +219,11 @@ export default function FluxoCaixaView() {
         </div>
       </div>
 
-      {/* MODAL DETALHADO */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/95 backdrop-blur-md animate-in fade-in duration-300">
           <div className="bg-zinc-900 border border-zinc-800 w-full max-w-3xl rounded-[3rem] shadow-2xl overflow-hidden">
             <div className="p-8 border-b border-zinc-800 flex justify-between items-center bg-zinc-900/50">
-              <h2 className="text-2xl font-black text-white uppercase italic tracking-tighter flex items-center gap-3"><Calculator className="text-[#F1C40F]" /> Novo Lançamento Detalhado</h2>
+              <h2 className="text-2xl font-black text-white uppercase italic tracking-tighter flex items-center gap-3"><Calculator className="text-[#F1C40F]" /> Novo Lançamento</h2>
               <button onClick={() => setIsModalOpen(false)} className="text-zinc-500 hover:text-white transition-colors"><X size={32}/></button>
             </div>
             <form onSubmit={handleSave} className="p-10 grid grid-cols-1 md:grid-cols-2 gap-8">
