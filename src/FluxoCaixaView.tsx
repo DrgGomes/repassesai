@@ -75,7 +75,6 @@ export default function FluxoCaixaView() {
       const { data: userData } = await supabase.auth.getUser();
       if (!userData.user) throw new Error("Acesso negado.");
 
-      // 1. Salva a Entrada (DRE/Competência)
       const { data: entry, error: entryError } = await supabase
         .from('financial_entries')
         .insert([{
@@ -93,7 +92,6 @@ export default function FluxoCaixaView() {
 
       if (entryError) throw entryError;
 
-      // 2. Gera as Parcelas (Caixa)
       const schedulesToInsert = generateSchedules(totalCents, installments, dueDate, type).map(s => ({
         ...s, entry_id: entry.id, user_id: userData.user?.id
       }));
@@ -114,16 +112,29 @@ export default function FluxoCaixaView() {
     setSelectedProduct(''); setSelectedSupplier('');
   }
 
+  // Se estiver carregando, mostra o spinner (Isso resolve o erro do Vercel)
+  if (loading) {
+    return (
+      <div className="h-full w-full flex flex-col items-center justify-center bg-[#09090b] space-y-4">
+        <Loader2 className="animate-spin text-[#F1C40F]" size={48} />
+        <p className="text-zinc-500 font-bold uppercase tracking-widest text-xs">Carregando Tesouraria...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-[1400px] mx-auto space-y-8 animate-in fade-in duration-700 pb-20">
       
       {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[#09090b] p-8 rounded-[2.5rem] border border-zinc-800/50 shadow-2xl">
         <div className="space-y-1">
+          <div className="flex items-center gap-2 text-[#F1C40F] mb-1">
+            <LayoutDashboard size={14} />
+            <span className="text-[10px] font-black uppercase tracking-[0.3em]">Módulo de Fluxo</span>
+          </div>
           <h1 className="text-5xl font-black tracking-tighter uppercase italic leading-none">
             <span className="text-zinc-200">Fluxo de</span> <span className="text-[#F1C40F]">Caixa</span>
           </h1>
-          <p className="text-zinc-500 text-sm font-medium">Gestão profissional de entradas, saídas e parcelamentos.</p>
         </div>
         <button 
           className="bg-[#F1C40F] hover:bg-[#d4ac0d] text-[#09090b] font-black px-10 py-5 rounded-2xl flex items-center gap-3 transition-all transform hover:scale-105 shadow-xl"
@@ -180,7 +191,10 @@ export default function FluxoCaixaView() {
                   <td className="p-6 font-mono text-xs text-zinc-400">{item.due_date}</td>
                   <td className="p-6">
                     <div className="font-bold text-zinc-200 uppercase text-xs">{item.financial_entries?.description}</div>
-                    <div className="text-[10px] text-zinc-500 mt-1">{item.financial_entries?.supplier_name || 'GERAL'}</div>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-[10px] text-zinc-500">{item.financial_entries?.supplier_name || 'GERAL'}</span>
+                      {item.financial_entries?.attachment_url && <Paperclip className="w-3 h-3 text-emerald-500" />}
+                    </div>
                   </td>
                   <td className={`p-6 font-black ${item.type === 'INCOME' ? 'text-emerald-400' : 'text-rose-400'}`}>
                     {item.type === 'INCOME' ? '+' : '-'} {formatCentsToBRL(item.amount_cents)}
@@ -210,40 +224,37 @@ export default function FluxoCaixaView() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in duration-300">
           <div className="bg-zinc-900 border border-zinc-800 w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden">
             <div className="p-8 border-b border-zinc-800 flex justify-between items-center bg-zinc-900/50">
-              <h2 className="text-2xl font-black text-white uppercase italic tracking-tighter">Novo Lançamento Inteligente</h2>
+              <h2 className="text-2xl font-black text-white uppercase italic tracking-tighter">Novo Lançamento</h2>
               <button onClick={() => setIsModalOpen(false)} className="text-zinc-500 hover:text-white transition-colors"><X size={32}/></button>
             </div>
             
             <form onSubmit={handleSave} className="p-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Tipo de Lançamento */}
               <div className="md:col-span-2 flex bg-[#09090b] p-1.5 rounded-2xl border border-zinc-800">
-                <button type="button" onClick={() => setType('EXPENSE')} className={`flex-1 py-4 rounded-xl text-xs font-black uppercase transition-all ${type === 'EXPENSE' ? 'bg-rose-500 text-white shadow-lg' : 'text-zinc-500'}`}>💸 Saída / Compra</button>
-                <button type="button" onClick={() => setType('INCOME')} className={`flex-1 py-4 rounded-xl text-xs font-black uppercase transition-all ${type === 'INCOME' ? 'bg-emerald-500 text-white shadow-lg' : 'text-zinc-500'}`}>💰 Entrada / Receita</button>
+                <button type="button" onClick={() => setType('EXPENSE')} className={`flex-1 py-4 rounded-xl text-xs font-black uppercase transition-all ${type === 'EXPENSE' ? 'bg-rose-500 text-white shadow-lg' : 'text-zinc-500'}`}>💸 Saída</button>
+                <button type="button" onClick={() => setType('INCOME')} className={`flex-1 py-4 rounded-xl text-xs font-black uppercase transition-all ${type === 'INCOME' ? 'bg-emerald-500 text-white shadow-lg' : 'text-zinc-500'}`}>💰 Entrada</button>
               </div>
 
-              {/* Dados Básicos */}
               <div className="space-y-4">
                 <div>
-                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 flex items-center gap-2"><Tag size={12}/> Descrição Livre</label>
-                  <input required value={description} onChange={e => setDescription(e.target.value)} className="w-full bg-[#09090b] border border-zinc-800 rounded-xl px-4 py-3.5 text-white focus:border-[#F1C40F] outline-none font-bold" placeholder="Ex: Reposição de Estoque" />
+                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 flex items-center gap-2"><Tag size={12}/> Descrição</label>
+                  <input required value={description} onChange={e => setDescription(e.target.value)} className="w-full bg-[#09090b] border border-zinc-800 rounded-xl px-4 py-3.5 text-white focus:border-[#F1C40F] outline-none font-bold" placeholder="Ex: Reposição" />
                 </div>
                 <div>
-                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 flex items-center gap-2"><Package size={12}/> Selecionar Produto</label>
+                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 flex items-center gap-2"><Package size={12}/> Produto</label>
                   <select value={selectedProduct} onChange={e => setSelectedProduct(e.target.value)} className="w-full bg-[#09090b] border border-zinc-800 rounded-xl px-4 py-3.5 text-white focus:border-[#F1C40F] outline-none font-bold">
-                    <option value="">Nenhum produto selecionado</option>
-                    {products.map(p => <option key={p.id} value={p.id}>{p.nome} ({p.sku})</option>)}
+                    <option value="">Nenhum produto</option>
+                    {products.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 flex items-center gap-2"><Users size={12}/> Fornecedor</label>
                   <select value={selectedSupplier} onChange={e => setSelectedSupplier(e.target.value)} className="w-full bg-[#09090b] border border-zinc-800 rounded-xl px-4 py-3.5 text-white focus:border-[#F1C40F] outline-none font-bold">
-                    <option value="">Selecione o Fornecedor</option>
+                    <option value="">Selecione</option>
                     {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
                 </div>
               </div>
 
-              {/* Valores e Datas */}
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -251,7 +262,7 @@ export default function FluxoCaixaView() {
                     <input required value={unitValue} onChange={e => setUnitValue(e.target.value)} className="w-full bg-[#09090b] border border-zinc-800 rounded-xl px-4 py-3.5 text-white focus:border-[#F1C40F] outline-none font-bold" placeholder="0,00" />
                   </div>
                   <div>
-                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 block">Quantidade</label>
+                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 block">Qtd</label>
                     <input required type="number" value={quantity} onChange={e => setQuantity(e.target.value)} className="w-full bg-[#09090b] border border-zinc-800 rounded-xl px-4 py-3.5 text-white focus:border-[#F1C40F] outline-none font-bold" />
                   </div>
                 </div>
@@ -261,28 +272,27 @@ export default function FluxoCaixaView() {
                     <input type="date" value={entryDate} onChange={e => setEntryDate(e.target.value)} className="w-full bg-[#09090b] border border-zinc-800 rounded-xl px-4 py-3.5 text-white focus:border-[#F1C40F] outline-none font-bold text-xs" />
                   </div>
                   <div>
-                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 block">1º Vencimento</label>
+                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 block">Vencimento</label>
                     <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="w-full bg-[#09090b] border border-zinc-800 rounded-xl px-4 py-3.5 text-white focus:border-[#F1C40F] outline-none font-bold text-xs" />
                   </div>
                 </div>
                 <div>
-                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 block">Parcelamento</label>
+                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 block">Parcelas</label>
                   <select value={installments} onChange={e => setInstallments(Number(e.target.value))} className="w-full bg-[#09090b] border border-zinc-800 rounded-xl px-4 py-3.5 text-white focus:border-[#F1C40F] outline-none font-bold">
-                    {[1,2,3,4,5,6,10,12].map(n => <option key={n} value={n}>{n === 1 ? 'À Vista' : `${n}x Parcelado`}</option>)}
+                    {[1,2,3,4,5,6,10,12].map(n => <option key={n} value={n}>{n === 1 ? 'À Vista' : `${n}x`}</option>)}
                   </select>
                 </div>
               </div>
 
-              {/* Resumo e Botão */}
               <div className="md:col-span-2 bg-[#09090b] p-6 rounded-3xl border border-zinc-800 flex justify-between items-center mt-2">
                 <div>
-                  <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Total do Lançamento</p>
+                  <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Total</p>
                   <p className="text-3xl font-black text-[#F1C40F] tracking-tighter">
                     {formatCentsToBRL(Math.round(parseFloat(unitValue.replace(',', '.') || '0') * 100) * parseInt(quantity || '0'))}
                   </p>
                 </div>
                 <button disabled={isSaving} type="submit" className="bg-[#F1C40F] text-[#09090b] font-black px-10 py-5 rounded-2xl hover:scale-105 transition-all flex items-center gap-2 shadow-xl disabled:opacity-50">
-                  {isSaving ? <Loader2 className="animate-spin" /> : <><Check size={24} strokeWidth={4}/> SALVAR AGORA</>}
+                  {isSaving ? <Loader2 className="animate-spin" /> : <><Check size={24} strokeWidth={4}/> SALVAR</>}
                 </button>
               </div>
             </form>
