@@ -64,31 +64,23 @@ export default function FluxoCaixaView() {
     setLoading(false);
   }
 
-  // FUNÇÃO: CADASTRO RÁPIDO DE FORNECEDOR
   async function quickAddSupplier() {
     const name = prompt("Nome do novo fornecedor:");
     if (!name) return;
-    const { data: userData } = await supabase.auth.getUser();
-    const { data, error } = await supabase.from('suppliers').insert([{ name, user_id: userData.user?.id }]).select().single();
-    if (error) alert("Erro ao criar fornecedor: " + error.message);
-    else {
-      setSuppliers(prev => [...prev, data]);
-      setSelectedSupplier(data.id);
-    }
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data, error } = await supabase.from('suppliers').insert([{ name, user_id: user?.id }]).select().single();
+    if (error) alert("Erro: " + error.message);
+    else { setSuppliers(prev => [...prev, data]); setSelectedSupplier(data.id); }
   }
 
-  // FUNÇÃO: CADASTRO RÁPIDO DE PRODUTO
   async function quickAddProduct() {
     const nome = prompt("Nome do novo produto:");
     const sku = prompt("SKU do produto:");
     if (!nome || !sku) return;
-    const { data: userData } = await supabase.auth.getUser();
-    const { data, error } = await supabase.from('produtos').insert([{ nome, sku, user_id: userData.user?.id }]).select().single();
-    if (error) alert("Erro ao criar produto: " + error.message);
-    else {
-      setProducts(prev => [...prev, data]);
-      setSelectedProduct(data.id);
-    }
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data, error } = await supabase.from('produtos').insert([{ nome, sku, user_id: user?.id }]).select().single();
+    if (error) alert("Erro: " + error.message);
+    else { setProducts(prev => [...prev, data]); setSelectedProduct(data.id); }
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -97,8 +89,10 @@ export default function FluxoCaixaView() {
     try {
       const unitCents = Math.round(parseFloat(unitValue.replace(',', '.')) * 100);
       const totalCents = BigInt(unitCents * parseInt(quantity));
-      const { data: userData } = await supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
       
+      if (!user) throw new Error("Sessão expirada. Faça login novamente.");
+
       const { data: entry, error: entryError } = await supabase
         .from('financial_entries')
         .insert([{
@@ -106,18 +100,18 @@ export default function FluxoCaixaView() {
           total_amount_cents: totalCents,
           unit_value_cents: BigInt(unitCents),
           quantity: parseInt(quantity),
-          type,
+          type: type, // Forçando o envio do campo type
           entry_date: entryDate,
           product_id: selectedProduct || null,
           supplier_id: selectedSupplier || null,
-          user_id: userData.user?.id
+          user_id: user.id
         }])
         .select().single();
 
       if (entryError) throw entryError;
 
       const schedulesToInsert = generateSchedules(totalCents, installments, dueDate, type).map(s => ({
-        ...s, entry_id: entry.id, user_id: userData.user?.id
+        ...s, entry_id: entry.id, user_id: user.id
       }));
 
       await supabase.from('financial_schedules').insert(schedulesToInsert);
@@ -135,36 +129,22 @@ export default function FluxoCaixaView() {
     setInstallments(1);
   }
 
-  if (loading) return (
-    <div className="h-full w-full flex flex-col items-center justify-center bg-[#09090b] space-y-4">
-      <Loader2 className="animate-spin text-[#F1C40F]" size={48} />
-      <p className="text-zinc-500 font-black uppercase tracking-[0.2em] text-[10px]">Sincronizando Tesouraria...</p>
-    </div>
-  );
+  if (loading) return <div className="h-full w-full flex items-center justify-center bg-[#09090b]"><Loader2 className="animate-spin text-[#F1C40F]" size={48} /></div>;
 
   return (
     <div className="max-w-[1400px] mx-auto space-y-8 animate-in fade-in duration-700 pb-20">
-      
-      {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[#09090b] p-8 rounded-[2.5rem] border border-zinc-800/50 shadow-2xl">
         <div className="space-y-1">
-          <div className="flex items-center gap-2 text-[#F1C40F] mb-1">
-            <LayoutDashboard size={14} />
-            <span className="text-[10px] font-black uppercase tracking-[0.3em]">Repasse.AI / Fluxo</span>
-          </div>
           <h1 className="text-5xl font-black tracking-tighter uppercase italic leading-none">
             <span className="text-white">Fluxo de</span> <span className="text-[#F1C40F]">Caixa</span>
           </h1>
+          <p className="text-zinc-500 text-sm font-medium">Gestão profissional de entradas, saídas e parcelamentos.</p>
         </div>
-        <button 
-          className="bg-[#F1C40F] hover:bg-[#d4ac0d] text-[#09090b] font-black px-10 py-5 rounded-2xl flex items-center gap-3 transition-all transform hover:scale-105 shadow-[0_20px_40px_-10px_rgba(241,196,15,0.3)]"
-          onClick={() => setIsModalOpen(true)}
-        >
-          <Plus className="w-6 h-6 stroke-[4px]" /> <span className="tracking-widest">NOVO LANÇAMENTO</span>
+        <button className="bg-[#F1C40F] hover:bg-[#d4ac0d] text-[#09090b] font-black px-10 py-5 rounded-2xl flex items-center gap-3 transition-all transform hover:scale-105 shadow-xl" onClick={() => setIsModalOpen(true)}>
+          <Plus className="w-6 h-6 stroke-[4px]" /> NOVO LANÇAMENTO
         </button>
       </div>
 
-      {/* CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
           { label: 'Entradas Hoje', val: stats.in, color: 'text-emerald-500', bg: 'border-emerald-500/20', Icon: ArrowUpCircle },
@@ -184,7 +164,6 @@ export default function FluxoCaixaView() {
         </div>
       </div>
 
-      {/* TABELA */}
       <div className="bg-zinc-900/20 border border-zinc-800/50 rounded-[2.5rem] overflow-hidden shadow-2xl">
         <div className="p-6 border-b border-zinc-800/50 bg-zinc-900/40 flex items-center gap-3">
           <Calendar className="w-5 h-5 text-[#F1C40F]" />
@@ -235,44 +214,37 @@ export default function FluxoCaixaView() {
         </div>
       </div>
 
-      {/* MODAL DETALHADO */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/95 backdrop-blur-md animate-in fade-in duration-300">
           <div className="bg-zinc-900 border border-zinc-800 w-full max-w-3xl rounded-[3rem] shadow-2xl overflow-hidden">
             <div className="p-8 border-b border-zinc-800 flex justify-between items-center bg-zinc-900/50">
-              <h2 className="text-2xl font-black text-white uppercase italic tracking-tighter flex items-center gap-3">
-                <Calculator className="text-[#F1C40F]" /> Novo Lançamento Detalhado
-              </h2>
+              <h2 className="text-2xl font-black text-white uppercase italic tracking-tighter flex items-center gap-3"><Calculator className="text-[#F1C40F]" /> Novo Lançamento Detalhado</h2>
               <button onClick={() => setIsModalOpen(false)} className="text-zinc-500 hover:text-white transition-colors"><X size={32}/></button>
             </div>
-            
             <form onSubmit={handleSave} className="p-10 grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="md:col-span-2 flex bg-[#09090b] p-1.5 rounded-2xl border border-zinc-800">
-                <button type="button" onClick={() => setType('EXPENSE')} className={`flex-1 py-4 rounded-xl text-xs font-black uppercase transition-all ${type === 'EXPENSE' ? 'bg-rose-600 text-white shadow-lg' : 'text-zinc-500'}`}>💸 Saída / Compra</button>
-                <button type="button" onClick={() => setType('INCOME')} className={`flex-1 py-4 rounded-xl text-xs font-black uppercase transition-all ${type === 'INCOME' ? 'bg-emerald-600 text-white shadow-lg' : 'text-zinc-500'}`}>💰 Entrada / Receita</button>
+                <button type="button" onClick={() => setType('EXPENSE')} className={`flex-1 py-4 rounded-xl text-xs font-black uppercase transition-all ${type === 'EXPENSE' ? 'bg-rose-600 text-white shadow-lg' : 'text-zinc-500'}`}>💸 Saída</button>
+                <button type="button" onClick={() => setType('INCOME')} className={`flex-1 py-4 rounded-xl text-xs font-black uppercase transition-all ${type === 'INCOME' ? 'bg-emerald-600 text-white shadow-lg' : 'text-zinc-500'}`}>💰 Entrada</button>
               </div>
-
               <div className="space-y-5">
                 <div>
                   <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 flex items-center gap-2"><Tag size={12}/> Descrição</label>
-                  <input required value={description} onChange={e => setDescription(e.target.value)} className="w-full bg-[#09090b] border border-zinc-800 rounded-2xl px-5 py-4 text-white focus:border-[#F1C40F] outline-none font-bold" placeholder="Ex: Reposição de Estoque" />
+                  <input required value={description} onChange={e => setDescription(e.target.value)} className="w-full bg-[#09090b] border border-zinc-800 rounded-2xl px-5 py-4 text-white focus:border-[#F1C40F] outline-none font-bold" placeholder="Ex: Reposição" />
                 </div>
-                
                 <div>
                   <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 flex justify-between items-center">
                     <span className="flex items-center gap-2"><Package size={12}/> Produto</span>
-                    <button type="button" onClick={quickAddProduct} className="text-[#F1C40F] hover:underline text-[9px] font-black">+ CADASTRAR NOVO</button>
+                    <button type="button" onClick={quickAddProduct} className="text-[#F1C40F] hover:underline text-[9px] font-black">+ NOVO</button>
                   </label>
                   <select value={selectedProduct} onChange={e => setSelectedProduct(e.target.value)} className="w-full bg-[#09090b] border border-zinc-800 rounded-2xl px-5 py-4 text-white focus:border-[#F1C40F] outline-none font-bold">
                     <option value="">Nenhum produto</option>
-                    {products.map(p => <option key={p.id} value={p.id}>{p.nome} ({p.sku})</option>)}
+                    {products.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
                   </select>
                 </div>
-
                 <div>
                   <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 flex justify-between items-center">
                     <span className="flex items-center gap-2"><Users size={12}/> Fornecedor</span>
-                    <button type="button" onClick={quickAddSupplier} className="text-[#F1C40F] hover:underline text-[9px] font-black">+ NOVO FORNECEDOR</button>
+                    <button type="button" onClick={quickAddSupplier} className="text-[#F1C40F] hover:underline text-[9px] font-black">+ NOVO</button>
                   </label>
                   <select value={selectedSupplier} onChange={e => setSelectedSupplier(e.target.value)} className="w-full bg-[#09090b] border border-zinc-800 rounded-2xl px-5 py-4 text-white focus:border-[#F1C40F] outline-none font-bold">
                     <option value="">Selecione</option>
@@ -280,7 +252,6 @@ export default function FluxoCaixaView() {
                   </select>
                 </div>
               </div>
-
               <div className="space-y-5">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -292,7 +263,6 @@ export default function FluxoCaixaView() {
                     <input required type="number" value={quantity} onChange={e => setQuantity(e.target.value)} className="w-full bg-[#09090b] border border-zinc-800 rounded-2xl px-5 py-4 text-white focus:border-[#F1C40F] outline-none font-bold" />
                   </div>
                 </div>
-
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 block text-emerald-500">Data Compra</label>
@@ -303,7 +273,6 @@ export default function FluxoCaixaView() {
                     <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="w-full bg-[#09090b] border border-zinc-800 rounded-2xl px-4 py-4 text-white focus:border-[#F1C40F] outline-none font-bold text-xs" />
                   </div>
                 </div>
-
                 <div>
                   <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 block">Parcelamento</label>
                   <select value={installments} onChange={e => setInstallments(Number(e.target.value))} className="w-full bg-[#09090b] border border-zinc-800 rounded-2xl px-5 py-4 text-white focus:border-[#F1C40F] outline-none font-bold">
@@ -311,15 +280,12 @@ export default function FluxoCaixaView() {
                   </select>
                 </div>
               </div>
-
               <div className="md:col-span-2 bg-[#050505] p-8 rounded-[2.5rem] border border-zinc-800 flex justify-between items-center mt-4">
                 <div>
-                  <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Total do Lançamento</p>
-                  <p className="text-4xl font-black text-[#F1C40F] tracking-tighter">
-                    {formatCentsToBRL(Math.round(parseFloat(unitValue.replace(',', '.') || '0') * 100) * parseInt(quantity || '0'))}
-                  </p>
+                  <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Total</p>
+                  <p className="text-4xl font-black text-[#F1C40F] tracking-tighter">{formatCentsToBRL(Math.round(parseFloat(unitValue.replace(',', '.') || '0') * 100) * parseInt(quantity || '0'))}</p>
                 </div>
-                <button disabled={isSaving} type="submit" className="bg-[#F1C40F] text-[#09090b] font-black px-12 py-6 rounded-[1.5rem] hover:scale-105 transition-all flex items-center gap-3 shadow-[0_20px_40px_-10px_rgba(241,196,15,0.4)] disabled:opacity-50">
+                <button disabled={isSaving} type="submit" className="bg-[#F1C40F] text-[#09090b] font-black px-12 py-6 rounded-[1.5rem] hover:scale-105 transition-all flex items-center gap-3 shadow-xl disabled:opacity-50">
                   {isSaving ? <Loader2 className="animate-spin" /> : <><Check size={28} strokeWidth={4}/> SALVAR AGORA</>}
                 </button>
               </div>
