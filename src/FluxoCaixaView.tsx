@@ -70,44 +70,45 @@ export default function FluxoCaixaView() {
     e.preventDefault();
     setIsSaving(true);
 
-    const amountCents = BigInt(Math.round(parseFloat(amount.replace(',', '.')) * 100));
-    
-    // 1. Cria a Entrada Principal (O Fato Gerador)
-    const { data: entry, error: entryError } = await supabase
-      .from('financial_entries')
-      .insert([{
-        description,
-        total_amount_cents: amountCents,
-        type,
-        entry_date: date,
-        user_id: (await supabase.auth.getUser()).data.user?.id
-      }])
-      .select()
-      .single();
+    try {
+      const amountCents = BigInt(Math.round(parseFloat(amount.replace(',', '.')) * 100));
+      const { data: userData } = await supabase.auth.getUser();
+      
+      if (!userData.user) throw new Error("Usuário não autenticado");
 
-    if (entryError) {
-      alert('Erro ao salvar: ' + entryError.message);
-      setIsSaving(false);
-      return;
-    }
+      // 1. Cria a Entrada Principal
+      const { data: entry, error: entryError } = await supabase
+        .from('financial_entries')
+        .insert([{
+          description,
+          total_amount_cents: amountCents,
+          type,
+          entry_date: date,
+          user_id: userData.user.id
+        }])
+        .select()
+        .single();
 
-    // 2. Gera as Parcelas usando a matemática do lib/finance
-    const schedulesToInsert = generateSchedules(amountCents, installments, date, type).map(s => ({
-      ...s,
-      entry_id: entry.id,
-      user_id: entry.user_id
-    }));
+      if (entryError) throw entryError;
 
-    const { error: schedError } = await supabase.from('financial_schedules').insert(schedulesToInsert);
+      // 2. Gera as Parcelas
+      const schedulesToInsert = generateSchedules(amountCents, installments, date, type).map(s => ({
+        ...s,
+        entry_id: entry.id,
+        user_id: userData.user?.id
+      }));
 
-    if (schedError) {
-      alert('Erro nas parcelas: ' + schedError.message);
-    } else {
+      const { error: schedError } = await supabase.from('financial_schedules').insert(schedulesToInsert);
+      if (schedError) throw schedError;
+
       setIsModalOpen(false);
       resetForm();
       fetchData();
+    } catch (err: any) {
+      alert('Erro ao salvar: ' + err.message);
+    } finally {
+      setIsSaving(false);
     }
-    setIsSaving(false);
   }
 
   function resetForm() {
@@ -115,6 +116,7 @@ export default function FluxoCaixaView() {
     setAmount('');
     setInstallments(1);
     setType('EXPENSE');
+    setDate(new Date().toISOString().split('T')[0]);
   }
 
   if (loading) return <div className="h-full w-full flex items-center justify-center bg-[#09090b]"><Loader2 className="animate-spin text-[#F1C40F]" size={32} /></div>;
@@ -122,15 +124,15 @@ export default function FluxoCaixaView() {
   return (
     <div className="max-w-[1400px] mx-auto space-y-8 animate-in fade-in duration-700 pb-20">
       
-      {/* HEADER COM TÍTULO CORRIGIDO */}
+      {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-[#09090b] p-6 rounded-3xl border border-zinc-800/50 shadow-2xl">
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-[#F1C40F] mb-1">
             <LayoutDashboard size={14} />
-            <span className="text-[10px] font-black uppercase tracking-[0.3em]">Módulo Ativo</span>
+            <span className="text-[10px] font-black uppercase tracking-[0.3em]">Gestão Financeira Ativa</span>
           </div>
           <h1 className="text-5xl font-black tracking-tighter uppercase italic leading-none">
-            <span className="text-white drop-shadow-[0_2px_10px_rgba(255,255,255,0.2)]">Fluxo de</span> <span className="text-[#F1C40F] drop-shadow-[0_2px_10px_rgba(241,196,15,0.3)]">Caixa</span>
+            <span className="text-zinc-200 drop-shadow-md">Fluxo de</span> <span className="text-[#F1C40F] drop-shadow-md">Caixa</span>
           </h1>
         </div>
         
@@ -143,28 +145,36 @@ export default function FluxoCaixaView() {
         </button>
       </div>
 
-      {/* CARDS DE STATUS */}
+      {/* CARDS DE STATUS - USANDO OS ÍCONES PARA NÃO DAR ERRO */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-zinc-900/40 border border-emerald-500/20 p-6 rounded-[2.5rem] shadow-xl">
+        <div className="bg-zinc-900/40 border border-emerald-500/20 p-6 rounded-[2.5rem] shadow-xl relative overflow-hidden">
+          <ArrowUpCircle className="absolute -right-2 -top-2 w-16 h-16 text-emerald-500/10" />
           <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Entradas Hoje</span>
           <p className="text-3xl font-black text-white mt-2 tracking-tighter">{formatCentsToBRL(stats.in)}</p>
         </div>
-        <div className="bg-zinc-900/40 border border-rose-500/20 p-6 rounded-[2.5rem] shadow-xl">
+        <div className="bg-zinc-900/40 border border-rose-500/20 p-6 rounded-[2.5rem] shadow-xl relative overflow-hidden">
+          <ArrowDownCircle className="absolute -right-2 -top-2 w-16 h-16 text-rose-500/10" />
           <span className="text-[10px] font-black text-rose-500 uppercase tracking-widest">Saídas Hoje</span>
           <p className="text-3xl font-black text-white mt-2 tracking-tighter">{formatCentsToBRL(stats.out)}</p>
         </div>
-        <div className="bg-zinc-900/40 border border-amber-500/20 p-6 rounded-[2.5rem] shadow-xl">
+        <div className="bg-zinc-900/40 border border-amber-500/20 p-6 rounded-[2.5rem] shadow-xl relative overflow-hidden">
+          <AlertCircle className="absolute -right-2 -top-2 w-16 h-16 text-amber-500/10" />
           <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Pendente Total</span>
           <p className="text-3xl font-black text-white mt-2 tracking-tighter">{formatCentsToBRL(stats.pending)}</p>
         </div>
-        <div className="bg-[#F1C40F] p-6 rounded-[2.5rem] shadow-xl">
+        <div className="bg-[#F1C40F] p-6 rounded-[2.5rem] shadow-xl relative overflow-hidden">
+          <TrendingUp className="absolute -right-2 -top-2 w-16 h-16 text-[#09090b]/10" />
           <span className="text-[10px] font-black text-[#09090b]/60 uppercase tracking-widest">Saúde Financeira</span>
           <p className="text-3xl font-black text-[#09090b] mt-2 tracking-tighter uppercase italic">{stats.in >= stats.out ? 'Estável' : 'Alerta'}</p>
         </div>
       </div>
 
-      {/* TABELA DE MOVIMENTAÇÕES */}
+      {/* TABELA */}
       <div className="bg-zinc-900/20 border border-zinc-800/50 rounded-[2.5rem] overflow-hidden shadow-2xl">
+        <div className="p-6 border-b border-zinc-800/50 bg-zinc-900/40 flex items-center gap-3">
+          <Calendar className="w-5 h-5 text-[#F1C40F]" />
+          <h2 className="font-black text-white uppercase tracking-widest text-xs">Agenda Financeira</h2>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
@@ -180,7 +190,13 @@ export default function FluxoCaixaView() {
               {schedules.map((item) => (
                 <tr key={item.id} className="hover:bg-white/[0.02] transition-all">
                   <td className="p-6 font-mono text-xs text-zinc-400">{item.due_date}</td>
-                  <td className="p-6 font-bold text-zinc-200 uppercase text-xs">{item.financial_entries?.description}</td>
+                  <td className="p-6">
+                    <div className="font-bold text-zinc-200 uppercase text-xs">{item.financial_entries?.description}</div>
+                    <div className="flex items-center gap-1 mt-1">
+                      <span className="text-[9px] text-zinc-500">{item.financial_entries?.supplier_name || 'GERAL'}</span>
+                      {item.financial_entries?.attachment_url && <Paperclip className="w-3 h-3 text-emerald-500" />}
+                    </div>
+                  </td>
                   <td className={`p-6 font-black ${item.type === 'INCOME' ? 'text-emerald-400' : 'text-rose-400'}`}>
                     {item.type === 'INCOME' ? '+' : '-'} {formatCentsToBRL(item.amount_cents)}
                   </td>
@@ -204,7 +220,7 @@ export default function FluxoCaixaView() {
         </div>
       </div>
 
-      {/* MODAL DE LANÇAMENTO (O CORAÇÃO DO MÓDULO) */}
+      {/* MODAL */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-300">
           <div className="bg-zinc-900 border border-zinc-800 w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden">
@@ -230,11 +246,16 @@ export default function FluxoCaixaView() {
                   <input required type="text" value={amount} onChange={e => setAmount(e.target.value)} className="w-full bg-[#09090b] border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-[#F1C40F] outline-none font-bold" placeholder="0,00" />
                 </div>
                 <div>
-                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 block">Parcelas</label>
-                  <select value={installments} onChange={e => setInstallments(Number(e.target.value))} className="w-full bg-[#09090b] border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-[#F1C40F] outline-none font-bold">
-                    {[1,2,3,4,5,6,10,12].map(n => <option key={n} value={n}>{n}x</option>)}
-                  </select>
+                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 block">Data</label>
+                  <input required type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full bg-[#09090b] border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-[#F1C40F] outline-none font-bold" />
                 </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 block">Parcelas</label>
+                <select value={installments} onChange={e => setInstallments(Number(e.target.value))} className="w-full bg-[#09090b] border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-[#F1C40F] outline-none font-bold">
+                  {[1,2,3,4,5,6,10,12].map(n => <option key={n} value={n}>{n}x</option>)}
+                </select>
               </div>
 
               <button disabled={isSaving} type="submit" className="w-full bg-[#F1C40F] text-[#09090b] font-black py-4 rounded-2xl hover:scale-[1.02] transition-all flex justify-center items-center gap-2 shadow-xl">
