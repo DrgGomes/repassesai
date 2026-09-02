@@ -1,14 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from './supabase'; // Ajustado para usar o seu arquivo de conexão
-import { formatCentsToBRL } from '@/lib/finance';
+import { supabase } from './supabase';
+import { formatCentsToBRL } from './lib/finance'; // Corrigido o caminho aqui
 import { 
   Plus, 
   ArrowUpCircle, 
   ArrowDownCircle, 
   Calendar, 
-  FileText, 
   Paperclip, 
   TrendingUp,
   AlertCircle,
@@ -70,13 +69,10 @@ export default function FluxoCaixaView() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      {/* Título Didático */}
       <div className="flex justify-between items-end">
         <div>
           <h1 className="text-3xl font-black tracking-tight text-[#F1C40F] uppercase italic">Fluxo de Caixa</h1>
-          <p className="text-zinc-400 max-w-md">
-            Dinheiro real: o que já caiu, o que vai sair e a saúde do seu bolso hoje.
-          </p>
+          <p className="text-zinc-400 max-w-md">Dinheiro real: o que já caiu, o que vai sair e a saúde do seu bolso hoje.</p>
         </div>
         <button 
           className="bg-[#F1C40F] hover:bg-[#d4ac0d] text-[#09090b] font-black px-6 py-3 rounded-xl flex items-center gap-2 transition-all transform hover:scale-105 shadow-[0_0_20px_rgba(241,196,15,0.2)]"
@@ -86,7 +82,6 @@ export default function FluxoCaixaView() {
         </button>
       </div>
 
-      {/* Cards Coloridos */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-emerald-500/10 border border-emerald-500/20 p-5 rounded-2xl">
           <div className="flex justify-between items-start">
@@ -117,13 +112,10 @@ export default function FluxoCaixaView() {
             <span className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Status</span>
             <TrendingUp className="w-5 h-5 text-zinc-500" />
           </div>
-          <p className="text-2xl font-black text-zinc-100 mt-2 lowercase">
-            {stats.in > stats.out ? 'saudável' : 'atenção'}
-          </p>
+          <p className="text-2xl font-black text-zinc-100 mt-2 lowercase">{stats.in > stats.out ? 'saudável' : 'atenção'}</p>
         </div>
       </div>
 
-      {/* Lista de Movimentações */}
       <div className="bg-zinc-900/50 border border-zinc-800 rounded-2xl overflow-hidden">
         <div className="p-5 border-b border-zinc-800 flex justify-between items-center bg-zinc-900/30">
           <h2 className="font-bold flex items-center gap-2 text-zinc-300 uppercase text-sm tracking-widest">
@@ -144,9 +136,7 @@ export default function FluxoCaixaView() {
             </thead>
             <tbody className="divide-y divide-zinc-800/50">
               {schedules.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="p-10 text-center text-zinc-500 text-sm italic">Nenhuma movimentação encontrada.</td>
-                </tr>
+                <tr><td colSpan={5} className="p-10 text-center text-zinc-500 text-sm italic">Nenhuma movimentação encontrada.</td></tr>
               ) : schedules.map((item) => (
                 <tr key={item.id} className={`hover:bg-zinc-800/30 transition-colors ${item.due_date === todayStr ? 'bg-[#F1C40F]/5' : ''}`}>
                   <td className="p-4 font-mono text-xs text-zinc-400">{item.due_date}</td>
@@ -175,9 +165,7 @@ export default function FluxoCaixaView() {
                           fetchData();
                         }}
                         className="bg-zinc-100 hover:bg-white text-zinc-950 text-[10px] font-black px-3 py-1.5 rounded-lg transition-transform active:scale-95"
-                      >
-                        BAIXAR
-                      </button>
+                      >BAIXAR</button>
                     )}
                   </td>
                 </tr>
