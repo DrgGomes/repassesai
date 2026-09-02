@@ -5,7 +5,7 @@ import { supabase } from './supabase';
 import { formatCentsToBRL, generateSchedules } from './lib/finance';
 import { 
   Plus, ArrowUpCircle, ArrowDownCircle, Calendar, Paperclip, TrendingUp,
-  AlertCircle, Loader2, LayoutDashboard, X, Check, Package, Users, Tag
+  AlertCircle, Loader2, LayoutDashboard, X, Check, Package, Users, Tag, Calculator
 } from 'lucide-react';
 
 export default function FluxoCaixaView() {
@@ -16,7 +16,7 @@ export default function FluxoCaixaView() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Estados do Formulário Completo
+  // Estados do Formulário
   const [description, setDescription] = useState('');
   const [type, setType] = useState<'INCOME' | 'EXPENSE'>('EXPENSE');
   const [selectedProduct, setSelectedProduct] = useState('');
@@ -36,8 +36,8 @@ export default function FluxoCaixaView() {
   }, []);
 
   async function fetchResources() {
-    const { data: prods } = await supabase.from('produtos').select('id, nome, sku');
-    const { data: supps } = await supabase.from('suppliers').select('id, name');
+    const { data: prods } = await supabase.from('produtos').select('id, nome, sku').order('nome');
+    const { data: supps } = await supabase.from('suppliers').select('id, name').order('name');
     if (prods) setProducts(prods);
     if (supps) setSuppliers(supps);
   }
@@ -55,8 +55,7 @@ export default function FluxoCaixaView() {
       data.forEach((item: any) => {
         const amt = BigInt(item.amount_cents);
         if (item.due_date === todayStr) {
-          if (item.type === 'INCOME') inSum += amt;
-          if (item.type === 'EXPENSE') outSum += amt;
+          item.type === 'INCOME' ? (inSum += amt) : (outSum += amt);
         }
         if (item.status === 'PENDING') pendingSum += amt;
       });
@@ -65,20 +64,45 @@ export default function FluxoCaixaView() {
     setLoading(false);
   }
 
+  // FUNÇÃO: CADASTRO RÁPIDO DE FORNECEDOR
+  async function quickAddSupplier() {
+    const name = prompt("Nome do novo fornecedor:");
+    if (!name) return;
+    const { data: userData } = await supabase.auth.getUser();
+    const { data, error } = await supabase.from('suppliers').insert([{ name, user_id: userData.user?.id }]).select().single();
+    if (error) alert("Erro ao criar fornecedor: " + error.message);
+    else {
+      setSuppliers(prev => [...prev, data]);
+      setSelectedSupplier(data.id);
+    }
+  }
+
+  // FUNÇÃO: CADASTRO RÁPIDO DE PRODUTO
+  async function quickAddProduct() {
+    const nome = prompt("Nome do novo produto:");
+    const sku = prompt("SKU do produto:");
+    if (!nome || !sku) return;
+    const { data: userData } = await supabase.auth.getUser();
+    const { data, error } = await supabase.from('produtos').insert([{ nome, sku, user_id: userData.user?.id }]).select().single();
+    if (error) alert("Erro ao criar produto: " + error.message);
+    else {
+      setProducts(prev => [...prev, data]);
+      setSelectedProduct(data.id);
+    }
+  }
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     setIsSaving(true);
-
     try {
       const unitCents = Math.round(parseFloat(unitValue.replace(',', '.')) * 100);
       const totalCents = BigInt(unitCents * parseInt(quantity));
       const { data: userData } = await supabase.auth.getUser();
-      if (!userData.user) throw new Error("Acesso negado.");
-
+      
       const { data: entry, error: entryError } = await supabase
         .from('financial_entries')
         .insert([{
-          description: description || 'Compra de Mercadoria',
+          description: description || 'Lançamento Manual',
           total_amount_cents: totalCents,
           unit_value_cents: BigInt(unitCents),
           quantity: parseInt(quantity),
@@ -86,7 +110,7 @@ export default function FluxoCaixaView() {
           entry_date: entryDate,
           product_id: selectedProduct || null,
           supplier_id: selectedSupplier || null,
-          user_id: userData.user.id
+          user_id: userData.user?.id
         }])
         .select().single();
 
@@ -96,31 +120,27 @@ export default function FluxoCaixaView() {
         ...s, entry_id: entry.id, user_id: userData.user?.id
       }));
 
-      const { error: schedError } = await supabase.from('financial_schedules').insert(schedulesToInsert);
-      if (schedError) throw schedError;
-
+      await supabase.from('financial_schedules').insert(schedulesToInsert);
       setIsModalOpen(false);
       resetForm();
       fetchData();
     } catch (err: any) {
-      alert('Erro: ' + err.message);
+      alert('Erro ao salvar: ' + err.message);
     } finally { setIsSaving(false); }
   }
 
   function resetForm() {
     setDescription(''); setUnitValue(''); setQuantity('1');
     setSelectedProduct(''); setSelectedSupplier('');
+    setInstallments(1);
   }
 
-  // Se estiver carregando, mostra o spinner (Isso resolve o erro do Vercel)
-  if (loading) {
-    return (
-      <div className="h-full w-full flex flex-col items-center justify-center bg-[#09090b] space-y-4">
-        <Loader2 className="animate-spin text-[#F1C40F]" size={48} />
-        <p className="text-zinc-500 font-bold uppercase tracking-widest text-xs">Carregando Tesouraria...</p>
-      </div>
-    );
-  }
+  if (loading) return (
+    <div className="h-full w-full flex flex-col items-center justify-center bg-[#09090b] space-y-4">
+      <Loader2 className="animate-spin text-[#F1C40F]" size={48} />
+      <p className="text-zinc-500 font-black uppercase tracking-[0.2em] text-[10px]">Sincronizando Tesouraria...</p>
+    </div>
+  );
 
   return (
     <div className="max-w-[1400px] mx-auto space-y-8 animate-in fade-in duration-700 pb-20">
@@ -130,41 +150,37 @@ export default function FluxoCaixaView() {
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-[#F1C40F] mb-1">
             <LayoutDashboard size={14} />
-            <span className="text-[10px] font-black uppercase tracking-[0.3em]">Módulo de Fluxo</span>
+            <span className="text-[10px] font-black uppercase tracking-[0.3em]">Repasse.AI / Fluxo</span>
           </div>
           <h1 className="text-5xl font-black tracking-tighter uppercase italic leading-none">
-            <span className="text-zinc-200">Fluxo de</span> <span className="text-[#F1C40F]">Caixa</span>
+            <span className="text-white">Fluxo de</span> <span className="text-[#F1C40F]">Caixa</span>
           </h1>
         </div>
         <button 
-          className="bg-[#F1C40F] hover:bg-[#d4ac0d] text-[#09090b] font-black px-10 py-5 rounded-2xl flex items-center gap-3 transition-all transform hover:scale-105 shadow-xl"
+          className="bg-[#F1C40F] hover:bg-[#d4ac0d] text-[#09090b] font-black px-10 py-5 rounded-2xl flex items-center gap-3 transition-all transform hover:scale-105 shadow-[0_20px_40px_-10px_rgba(241,196,15,0.3)]"
           onClick={() => setIsModalOpen(true)}
         >
-          <Plus className="w-6 h-6 stroke-[3px]" /> NOVO LANÇAMENTO
+          <Plus className="w-6 h-6 stroke-[4px]" /> <span className="tracking-widest">NOVO LANÇAMENTO</span>
         </button>
       </div>
 
-      {/* CARDS DE RESUMO */}
+      {/* CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-zinc-900/40 border border-emerald-500/20 p-6 rounded-[2.5rem] shadow-xl relative overflow-hidden">
-          <ArrowUpCircle className="absolute -right-2 -top-2 w-20 h-20 text-emerald-500/10" />
-          <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">Entradas Hoje</span>
-          <p className="text-3xl font-black text-white mt-2">{formatCentsToBRL(stats.in)}</p>
-        </div>
-        <div className="bg-zinc-900/40 border border-rose-500/20 p-6 rounded-[2.5rem] shadow-xl relative overflow-hidden">
-          <ArrowDownCircle className="absolute -right-2 -top-2 w-20 h-20 text-rose-500/10" />
-          <span className="text-[10px] font-black text-rose-500 uppercase tracking-widest">Saídas Hoje</span>
-          <p className="text-3xl font-black text-white mt-2">{formatCentsToBRL(stats.out)}</p>
-        </div>
-        <div className="bg-zinc-900/40 border border-amber-500/20 p-6 rounded-[2.5rem] shadow-xl relative overflow-hidden">
-          <AlertCircle className="absolute -right-2 -top-2 w-20 h-20 text-amber-500/10" />
-          <span className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Pendente Total</span>
-          <p className="text-3xl font-black text-white mt-2">{formatCentsToBRL(stats.pending)}</p>
-        </div>
-        <div className="bg-[#F1C40F] p-6 rounded-[2.5rem] shadow-xl relative overflow-hidden">
-          <TrendingUp className="absolute -right-2 -top-2 w-20 h-20 text-[#09090b]/10" />
-          <span className="text-[10px] font-black text-[#09090b]/60 uppercase tracking-widest">Status</span>
-          <p className="text-3xl font-black text-[#09090b] mt-2 uppercase italic">{stats.in >= stats.out ? 'Saudável' : 'Alerta'}</p>
+        {[
+          { label: 'Entradas Hoje', val: stats.in, color: 'text-emerald-500', bg: 'border-emerald-500/20', Icon: ArrowUpCircle },
+          { label: 'Saídas Hoje', val: stats.out, color: 'text-rose-500', bg: 'border-rose-500/20', Icon: ArrowDownCircle },
+          { label: 'Pendente Total', val: stats.pending, color: 'text-amber-500', bg: 'border-amber-500/20', Icon: AlertCircle },
+        ].map((card, i) => (
+          <div key={i} className={`bg-zinc-900/40 border ${card.bg} p-6 rounded-[2.5rem] shadow-xl relative overflow-hidden group`}>
+            <card.Icon className={`absolute -right-2 -top-2 w-20 h-20 ${card.color} opacity-5 group-hover:opacity-10 transition-opacity`} />
+            <span className={`text-[10px] font-black ${card.color} uppercase tracking-widest`}>{card.label}</span>
+            <p className="text-3xl font-black text-white mt-2 tracking-tighter">{formatCentsToBRL(card.val)}</p>
+          </div>
+        ))}
+        <div className="bg-[#F1C40F] p-6 rounded-[2.5rem] shadow-xl relative overflow-hidden group">
+          <TrendingUp className="absolute -right-2 -top-2 w-20 h-20 text-[#09090b] opacity-10" />
+          <span className="text-[10px] font-black text-[#09090b]/60 uppercase tracking-widest">Saúde Financeira</span>
+          <p className="text-3xl font-black text-[#09090b] mt-2 uppercase italic leading-none">{stats.in >= stats.out ? 'Saudável' : 'Alerta'}</p>
         </div>
       </div>
 
@@ -172,7 +188,7 @@ export default function FluxoCaixaView() {
       <div className="bg-zinc-900/20 border border-zinc-800/50 rounded-[2.5rem] overflow-hidden shadow-2xl">
         <div className="p-6 border-b border-zinc-800/50 bg-zinc-900/40 flex items-center gap-3">
           <Calendar className="w-5 h-5 text-[#F1C40F]" />
-          <h2 className="font-black text-white uppercase tracking-widest text-xs italic">Agenda Financeira</h2>
+          <h2 className="font-black text-white uppercase tracking-[0.2em] text-[10px] italic">Agenda de Vencimentos</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left">
@@ -187,16 +203,16 @@ export default function FluxoCaixaView() {
             </thead>
             <tbody className="divide-y divide-zinc-800/30">
               {schedules.map((item) => (
-                <tr key={item.id} className="hover:bg-white/[0.02] transition-all">
+                <tr key={item.id} className="hover:bg-white/[0.02] transition-colors group">
                   <td className="p-6 font-mono text-xs text-zinc-400">{item.due_date}</td>
                   <td className="p-6">
-                    <div className="font-bold text-zinc-200 uppercase text-xs">{item.financial_entries?.description}</div>
+                    <div className="font-bold text-zinc-200 uppercase text-xs group-hover:text-[#F1C40F] transition-colors">{item.financial_entries?.description}</div>
                     <div className="flex items-center gap-2 mt-1">
-                      <span className="text-[10px] text-zinc-500">{item.financial_entries?.supplier_name || 'GERAL'}</span>
+                      <span className="text-[9px] text-zinc-600 font-black uppercase">{item.financial_entries?.supplier_name || 'GERAL'}</span>
                       {item.financial_entries?.attachment_url && <Paperclip className="w-3 h-3 text-emerald-500" />}
                     </div>
                   </td>
-                  <td className={`p-6 font-black ${item.type === 'INCOME' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  <td className={`p-6 font-black text-sm ${item.type === 'INCOME' ? 'text-emerald-400' : 'text-rose-400'}`}>
                     {item.type === 'INCOME' ? '+' : '-'} {formatCentsToBRL(item.amount_cents)}
                   </td>
                   <td className="p-6">
@@ -209,7 +225,7 @@ export default function FluxoCaixaView() {
                       <button onClick={async () => {
                         await supabase.from('financial_schedules').update({ status: 'PAID', payment_date: todayStr }).eq('id', item.id);
                         fetchData();
-                      }} className="bg-white text-[#09090b] text-[10px] font-black px-4 py-2 rounded-xl hover:bg-[#F1C40F] transition-all">BAIXAR</button>
+                      }} className="bg-white text-[#09090b] text-[10px] font-black px-4 py-2 rounded-xl hover:bg-[#F1C40F] transition-all transform active:scale-90">BAIXAR</button>
                     )}
                   </td>
                 </tr>
@@ -219,80 +235,92 @@ export default function FluxoCaixaView() {
         </div>
       </div>
 
-      {/* MODAL COMPLETO */}
+      {/* MODAL DETALHADO */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md animate-in fade-in duration-300">
-          <div className="bg-zinc-900 border border-zinc-800 w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/95 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="bg-zinc-900 border border-zinc-800 w-full max-w-3xl rounded-[3rem] shadow-2xl overflow-hidden">
             <div className="p-8 border-b border-zinc-800 flex justify-between items-center bg-zinc-900/50">
-              <h2 className="text-2xl font-black text-white uppercase italic tracking-tighter">Novo Lançamento</h2>
+              <h2 className="text-2xl font-black text-white uppercase italic tracking-tighter flex items-center gap-3">
+                <Calculator className="text-[#F1C40F]" /> Novo Lançamento Detalhado
+              </h2>
               <button onClick={() => setIsModalOpen(false)} className="text-zinc-500 hover:text-white transition-colors"><X size={32}/></button>
             </div>
             
-            <form onSubmit={handleSave} className="p-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <form onSubmit={handleSave} className="p-10 grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="md:col-span-2 flex bg-[#09090b] p-1.5 rounded-2xl border border-zinc-800">
-                <button type="button" onClick={() => setType('EXPENSE')} className={`flex-1 py-4 rounded-xl text-xs font-black uppercase transition-all ${type === 'EXPENSE' ? 'bg-rose-500 text-white shadow-lg' : 'text-zinc-500'}`}>💸 Saída</button>
-                <button type="button" onClick={() => setType('INCOME')} className={`flex-1 py-4 rounded-xl text-xs font-black uppercase transition-all ${type === 'INCOME' ? 'bg-emerald-500 text-white shadow-lg' : 'text-zinc-500'}`}>💰 Entrada</button>
+                <button type="button" onClick={() => setType('EXPENSE')} className={`flex-1 py-4 rounded-xl text-xs font-black uppercase transition-all ${type === 'EXPENSE' ? 'bg-rose-600 text-white shadow-lg' : 'text-zinc-500'}`}>💸 Saída / Compra</button>
+                <button type="button" onClick={() => setType('INCOME')} className={`flex-1 py-4 rounded-xl text-xs font-black uppercase transition-all ${type === 'INCOME' ? 'bg-emerald-600 text-white shadow-lg' : 'text-zinc-500'}`}>💰 Entrada / Receita</button>
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-5">
                 <div>
                   <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 flex items-center gap-2"><Tag size={12}/> Descrição</label>
-                  <input required value={description} onChange={e => setDescription(e.target.value)} className="w-full bg-[#09090b] border border-zinc-800 rounded-xl px-4 py-3.5 text-white focus:border-[#F1C40F] outline-none font-bold" placeholder="Ex: Reposição" />
+                  <input required value={description} onChange={e => setDescription(e.target.value)} className="w-full bg-[#09090b] border border-zinc-800 rounded-2xl px-5 py-4 text-white focus:border-[#F1C40F] outline-none font-bold" placeholder="Ex: Reposição de Estoque" />
                 </div>
+                
                 <div>
-                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 flex items-center gap-2"><Package size={12}/> Produto</label>
-                  <select value={selectedProduct} onChange={e => setSelectedProduct(e.target.value)} className="w-full bg-[#09090b] border border-zinc-800 rounded-xl px-4 py-3.5 text-white focus:border-[#F1C40F] outline-none font-bold">
+                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 flex justify-between items-center">
+                    <span className="flex items-center gap-2"><Package size={12}/> Produto</span>
+                    <button type="button" onClick={quickAddProduct} className="text-[#F1C40F] hover:underline text-[9px] font-black">+ CADASTRAR NOVO</button>
+                  </label>
+                  <select value={selectedProduct} onChange={e => setSelectedProduct(e.target.value)} className="w-full bg-[#09090b] border border-zinc-800 rounded-2xl px-5 py-4 text-white focus:border-[#F1C40F] outline-none font-bold">
                     <option value="">Nenhum produto</option>
-                    {products.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                    {products.map(p => <option key={p.id} value={p.id}>{p.nome} ({p.sku})</option>)}
                   </select>
                 </div>
+
                 <div>
-                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 flex items-center gap-2"><Users size={12}/> Fornecedor</label>
-                  <select value={selectedSupplier} onChange={e => setSelectedSupplier(e.target.value)} className="w-full bg-[#09090b] border border-zinc-800 rounded-xl px-4 py-3.5 text-white focus:border-[#F1C40F] outline-none font-bold">
+                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 flex justify-between items-center">
+                    <span className="flex items-center gap-2"><Users size={12}/> Fornecedor</span>
+                    <button type="button" onClick={quickAddSupplier} className="text-[#F1C40F] hover:underline text-[9px] font-black">+ NOVO FORNECEDOR</button>
+                  </label>
+                  <select value={selectedSupplier} onChange={e => setSelectedSupplier(e.target.value)} className="w-full bg-[#09090b] border border-zinc-800 rounded-2xl px-5 py-4 text-white focus:border-[#F1C40F] outline-none font-bold">
                     <option value="">Selecione</option>
                     {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
                 </div>
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-5">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 block">Vlr. Unitário</label>
-                    <input required value={unitValue} onChange={e => setUnitValue(e.target.value)} className="w-full bg-[#09090b] border border-zinc-800 rounded-xl px-4 py-3.5 text-white focus:border-[#F1C40F] outline-none font-bold" placeholder="0,00" />
+                    <input required value={unitValue} onChange={e => setUnitValue(e.target.value)} className="w-full bg-[#09090b] border border-zinc-800 rounded-2xl px-5 py-4 text-white focus:border-[#F1C40F] outline-none font-bold" placeholder="0,00" />
                   </div>
                   <div>
                     <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 block">Qtd</label>
-                    <input required type="number" value={quantity} onChange={e => setQuantity(e.target.value)} className="w-full bg-[#09090b] border border-zinc-800 rounded-xl px-4 py-3.5 text-white focus:border-[#F1C40F] outline-none font-bold" />
+                    <input required type="number" value={quantity} onChange={e => setQuantity(e.target.value)} className="w-full bg-[#09090b] border border-zinc-800 rounded-2xl px-5 py-4 text-white focus:border-[#F1C40F] outline-none font-bold" />
                   </div>
                 </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 block">Data Compra</label>
-                    <input type="date" value={entryDate} onChange={e => setEntryDate(e.target.value)} className="w-full bg-[#09090b] border border-zinc-800 rounded-xl px-4 py-3.5 text-white focus:border-[#F1C40F] outline-none font-bold text-xs" />
+                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 block text-emerald-500">Data Compra</label>
+                    <input type="date" value={entryDate} onChange={e => setEntryDate(e.target.value)} className="w-full bg-[#09090b] border border-zinc-800 rounded-2xl px-4 py-4 text-white focus:border-[#F1C40F] outline-none font-bold text-xs" />
                   </div>
                   <div>
-                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 block">Vencimento</label>
-                    <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="w-full bg-[#09090b] border border-zinc-800 rounded-xl px-4 py-3.5 text-white focus:border-[#F1C40F] outline-none font-bold text-xs" />
+                    <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 block text-amber-500">1º Vencimento</label>
+                    <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="w-full bg-[#09090b] border border-zinc-800 rounded-2xl px-4 py-4 text-white focus:border-[#F1C40F] outline-none font-bold text-xs" />
                   </div>
                 </div>
+
                 <div>
-                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 block">Parcelas</label>
-                  <select value={installments} onChange={e => setInstallments(Number(e.target.value))} className="w-full bg-[#09090b] border border-zinc-800 rounded-xl px-4 py-3.5 text-white focus:border-[#F1C40F] outline-none font-bold">
-                    {[1,2,3,4,5,6,10,12].map(n => <option key={n} value={n}>{n === 1 ? 'À Vista' : `${n}x`}</option>)}
+                  <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2 block">Parcelamento</label>
+                  <select value={installments} onChange={e => setInstallments(Number(e.target.value))} className="w-full bg-[#09090b] border border-zinc-800 rounded-2xl px-5 py-4 text-white focus:border-[#F1C40F] outline-none font-bold">
+                    {[1,2,3,4,5,6,10,12].map(n => <option key={n} value={n}>{n === 1 ? 'Pagamento à Vista' : `${n}x Parcelado`}</option>)}
                   </select>
                 </div>
               </div>
 
-              <div className="md:col-span-2 bg-[#09090b] p-6 rounded-3xl border border-zinc-800 flex justify-between items-center mt-2">
+              <div className="md:col-span-2 bg-[#050505] p-8 rounded-[2.5rem] border border-zinc-800 flex justify-between items-center mt-4">
                 <div>
-                  <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Total</p>
-                  <p className="text-3xl font-black text-[#F1C40F] tracking-tighter">
+                  <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Total do Lançamento</p>
+                  <p className="text-4xl font-black text-[#F1C40F] tracking-tighter">
                     {formatCentsToBRL(Math.round(parseFloat(unitValue.replace(',', '.') || '0') * 100) * parseInt(quantity || '0'))}
                   </p>
                 </div>
-                <button disabled={isSaving} type="submit" className="bg-[#F1C40F] text-[#09090b] font-black px-10 py-5 rounded-2xl hover:scale-105 transition-all flex items-center gap-2 shadow-xl disabled:opacity-50">
-                  {isSaving ? <Loader2 className="animate-spin" /> : <><Check size={24} strokeWidth={4}/> SALVAR</>}
+                <button disabled={isSaving} type="submit" className="bg-[#F1C40F] text-[#09090b] font-black px-12 py-6 rounded-[1.5rem] hover:scale-105 transition-all flex items-center gap-3 shadow-[0_20px_40px_-10px_rgba(241,196,15,0.4)] disabled:opacity-50">
+                  {isSaving ? <Loader2 className="animate-spin" /> : <><Check size={28} strokeWidth={4}/> SALVAR AGORA</>}
                 </button>
               </div>
             </form>
