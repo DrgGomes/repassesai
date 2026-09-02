@@ -1,13 +1,16 @@
+'use client';
+
 import { useState, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { supabase } from './supabase';
+import FluxoCaixaView from './FluxoCaixaView'; // Novo Módulo
 import { 
   PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer, Legend 
 } from 'recharts';
 import { 
-  LayoutDashboard, UploadCloud, Hourglass, Download, FileSpreadsheet, AlertTriangle, Loader2, Database, LogOut, FileJson, Ban, Package, LineChart, Save, Trash2, Archive, CheckCircle2, Search, ShieldCheck, Check, ChevronDown, Smartphone, ShoppingBag, Video, Store
+  LayoutDashboard, UploadCloud, Hourglass, Download, FileSpreadsheet, AlertTriangle, Loader2, Database, LogOut, FileJson, Ban, Package, LineChart, Save, Trash2, Archive, CheckCircle2, Search, ShieldCheck, Check, ChevronDown, Smartphone, ShoppingBag, Video, Store, DollarSign
 } from 'lucide-react';
 
 const Tooltip = ({ children, texto }: { children: React.ReactNode, texto: string }) => (
@@ -24,15 +27,13 @@ export default function Dashboard({ session }: any) {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [marketplace, setMarketplace] = useState('kwai'); 
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({ kwai: true, tiktok: true }); 
-
   const [isSyncing, setIsSyncing] = useState(false);
   const [isF5Loading, setIsF5Loading] = useState(true);
-  
+
   // Fontes de Dados
   const [upsellerData, setUpsellerData] = useState<any[]>([]);
   const [kwaiData, setKwaiData] = useState<any[]>([]);
   const [tiktokData, setTiktokData] = useState<any[]>([]);
-  
   const [resultados, setResultados] = useState<any>(null);
   const [meusProdutos, setMeusProdutos] = useState<any[]>([]);
 
@@ -56,12 +57,11 @@ export default function Dashboard({ session }: any) {
   const carregarDashboardDoBanco = async () => {
     const tabela = marketplace === 'tiktok' ? 'pedidos_tiktok' : 'pedidos_kwai';
     const { data: dbOrders } = await supabase.from(tabela).select('*').eq('user_id', session.user.id);
-    
     if (!dbOrders || dbOrders.length === 0) {
       setResultados(null);
       return;
     }
-
+    
     let atrasados: any[] = [], divergencias: any[] = [], noPrazo: any[] = [], corretos: any[] = [], cancelados: any[] = [], amostras: any[] = [], divergenciasPreco: any[] = [];
     let valorBruto = 0, totalRetido = 0, custoTotal = 0, lucroLiquido = 0;
 
@@ -75,7 +75,6 @@ export default function Dashboard({ session }: any) {
        } else {
            valorBruto += Number(order.valor_bruto);
            custoTotal += Number(order.custo_pedido);
-           
            if (order.status === 'NO_PRAZO') {
                noPrazo.push({ "ID do Pedido": order.id_pedido, "Vencimento Esperado": new Date(order.vencimento_esperado).toLocaleDateString(), "Valor Estimado (R$)": Number(order.valor_bruto) });
            } else if (order.status === 'ATRASADO') {
@@ -186,7 +185,6 @@ export default function Dashboard({ session }: any) {
     const finData = marketplace === 'tiktok' ? tiktokData : kwaiData;
     if (upsellerData.length === 0 && finData.length === 0) return alert(`⚠️ Suba as planilhas da UPSeller e da ${marketplace.toUpperCase()} primeiro.`);
     setIsSyncing(true);
-
     const tol = 0.02; 
     const produtosExtraidos = new Map();
     upsellerData.forEach(row => {
@@ -194,7 +192,6 @@ export default function Dashboard({ session }: any) {
       const nome = extrair(row, ['nome do produto', 'produto', 'título']);
       if (sku && nome && !produtosExtraidos.has(String(sku).trim())) produtosExtraidos.set(String(sku).trim(), { user_id: session.user.id, sku: String(sku).trim(), nome: String(nome).trim() });
     });
-
     if (produtosExtraidos.size > 0) {
       await supabase.from('produtos').upsert(Array.from(produtosExtraidos.values()), { onConflict: 'user_id,sku', ignoreDuplicates: true });
       await carregarProdutos(); 
@@ -218,16 +215,14 @@ export default function Dashboard({ session }: any) {
     upsellerData.forEach(row => {
       const idPedido = String(extrair(row, ['nº de pedido da plataforma', 'nº de pedido', 'order id']) || '').trim();
       if (!idPedido) return;
-      
       const statusPos = extrair(row, ['pós-venda', 'cancelado', 'devolvido', 'status']);
       const valorTotalProdutos = Number(extrair(row, ['valor total de produtos'])) || Number(extrair(row, ['valor do pedido'])) || 0; 
-      
       const dEnvio = new Date(String(extrair(row, ['hora de envio', 'hora do pedido'])).replace(' ', 'T') || 0);
       const dVencimento = new Date(dEnvio.getTime() + (22 * 86400000));
       const sku = String(extrair(row, ['sku', 'especificação', 'código'])).trim();
       const qtd = Number(extrair(row, ['qtd', 'quantidade'])) || 1;
       const custoUnitario = mapaCustos.get(sku)?.custo || 0;
-      
+
       let status = "PENDENTE";
       if (String(statusPos).toLowerCase().includes('cancelado') || String(statusPos).toLowerCase().includes('devolvido')) status = "CANCELADO_DEVOLVIDO";
 
@@ -242,7 +237,6 @@ export default function Dashboard({ session }: any) {
 
     Array.from(orderMap.values()).forEach((order: any) => {
        const finRow = finData.find(r => String(extrair(r, ['número do pedido', 'pedido', 'id', 'id do pedido/ajuste'])).trim().includes(order.id_pedido));
-       
        let auditObj: any = { pedido_id: order.id_pedido, upseller: { valor_total_produtos: order.valor_bruto, quantidade_itens: order.qtd }, financeiro: null, calculo: null, classificacao: { status: order.status } };
 
        if (order.status === 'CANCELADO_DEVOLVIDO' || order.status === 'REEMBOLSO') {
@@ -271,7 +265,7 @@ export default function Dashboard({ session }: any) {
        if (marketplace === 'tiktok') {
            valorRealVenda = Number(extrair(finRow, ['vendas líquidas dos produtos'])) || order.valor_bruto;
            repasseLiquidado = Number(extrair(finRow, ['valor total a ser liquidado'])) || 0;
-           
+
            const dataCriacaoStr = extrair(finRow, ['data de criação do pedido']);
            let isNewRule = false;
            if (dataCriacaoStr) {
@@ -289,7 +283,6 @@ export default function Dashboard({ session }: any) {
 
            const sfp = Math.abs(Number(extrair(finRow, ['taxa de serviço do sfp'])) || 0);
            const afiliado = Math.abs(Number(extrair(finRow, ['comissões de afiliados'])) || 0);
-           
            repasseEsperado = valorRealVenda - taxaComissaoEsperada - taxaFixaEsperada - sfp - afiliado;
            diferenca = repasseEsperado - repasseLiquidado;
 
@@ -347,7 +340,6 @@ export default function Dashboard({ session }: any) {
            jsonAuditExport.push(auditObj);
            return;
        }
-
        if (order.status === 'AMOSTRA_CONFIRMADA') {
            amostras.push({ "ID do Pedido": order.id_pedido, "Valor Real": valorRealVenda, "Status": "AMOSTRA_CONFIRMADA" });
            auditObj.classificacao.status = 'AMOSTRA_CONFIRMADA';
@@ -359,7 +351,7 @@ export default function Dashboard({ session }: any) {
        order.receita_kwai = repasseLiquidado;
        order.lucro_pedido = repasseLiquidado - order.custo_pedido;
        order.roubo_taxa = diferenca; 
-       
+
        valorBrutoGeral += valorRealVenda;
        custoTotalGeral += order.custo_pedido;
        lucroLiquidoGeral += order.lucro_pedido;
@@ -380,7 +372,6 @@ export default function Dashboard({ session }: any) {
              const freteCobradoVendedor = Number(extrair(finRow, ['frete pago pelo vendedor'])) || 0;
              if (Math.abs(freteCobradoVendedor) > tol) motivo = `Cobraram Frete: R$ ${Math.abs(freteCobradoVendedor).toFixed(2)}`;
           }
-          
           divergencias.push({ ...baseReport, "Motivo do Erro": motivo, "STATUS": "🔴 COBRAR ELES" });
           totalDiferencas += diferenca;
        }
@@ -411,19 +402,23 @@ export default function Dashboard({ session }: any) {
   };
 
   const handleMenuClick = (mkt: string, tab: string) => {
-    if (mkt !== 'kwai' && mkt !== 'tiktok' && mkt !== 'global') {
+    if (mkt !== 'kwai' && mkt !== 'tiktok' && mkt !== 'global' && mkt !== 'caixa') {
       setMarketplace(mkt);
       setActiveTab('em_breve');
       return;
     }
-    if (mkt !== marketplace) {
+    if (mkt !== marketplace && mkt !== 'global' && mkt !== 'caixa') {
         setResultados(null);
         setUpsellerData([]);
         setKwaiData([]);
         setTiktokData([]);
     }
-    setMarketplace(mkt);
-    setActiveTab(tab);
+    if (mkt === 'caixa') {
+      setActiveTab('caixa');
+    } else {
+      setMarketplace(mkt);
+      setActiveTab(tab);
+    }
   };
 
   const toggleMenu = (menu: string) => {
@@ -445,79 +440,12 @@ export default function Dashboard({ session }: any) {
     </div>
   );
 
-  return (
-    <div className="flex h-screen w-full bg-[#f8fafc] text-gray-800 font-sans overflow-hidden selection:bg-[#F1C40F] selection:text-black">
-      
-      {/* SIDEBAR MODULAR */}
-      <div className="w-72 bg-[#111827] flex-shrink-0 flex flex-col justify-between overflow-y-auto border-r border-gray-800 scrollbar-hide shadow-xl z-20 relative">
-        <div className="p-5">
-          <div className="flex items-center gap-3 mb-8 px-2 mt-2">
-            <div className="bg-[#F1C40F] p-2 rounded-lg shadow-lg"><ShieldCheck size={24} className="text-[#111827]" /></div>
-            <h1 className="text-xl font-black text-white tracking-widest">REPASSE<span className="text-[#F1C40F]">.AI</span></h1>
-          </div>
-          
-          <p className="text-[11px] uppercase tracking-widest text-gray-500 font-bold mb-3 ml-2">Suas Plataformas</p>
-          <div className="space-y-3 mb-6">
-            
-            {/* MENU KWAI */}
-            <div className="bg-gray-900/60 rounded-2xl border border-gray-800 overflow-hidden">
-              <button onClick={() => toggleMenu('kwai')} className={`w-full flex items-center justify-between p-4 text-sm font-bold ${marketplace==='kwai' ? 'text-white' : 'text-gray-400 hover:text-white hover:bg-gray-900/50'} transition-colors`}>
-                 <div className="flex items-center gap-3"><div className={`bg-[#F1C40F]/10 p-2 rounded-lg ${marketplace==='kwai'?'text-[#F1C40F]':'text-gray-500'}`}><Smartphone size={18}/></div> Kwai </div>
-                 {marketplace==='kwai' ? <div className="w-2 h-2 rounded-full bg-[#10b981] shadow-[0_0_8px_#10b981]"></div> : <ChevronDown size={16} className={`transition-transform text-gray-600 ${openMenus['kwai'] ? 'rotate-180' : ''}`} />}
-              </button>
-              {openMenus['kwai'] && (
-                <div className="pl-12 pr-4 pb-4 pt-1 space-y-1.5">
-                  <button onClick={() => handleMenuClick('kwai', 'dashboard')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${marketplace === 'kwai' && activeTab === 'dashboard' ? 'bg-[#F1C40F] text-[#111827] shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>Visão Geral</button>
-                  <button onClick={() => handleMenuClick('kwai', 'upload')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${marketplace === 'kwai' && activeTab === 'upload' ? 'bg-[#F1C40F] text-[#111827] shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>Subir Planilhas</button>
-                  <button onClick={() => handleMenuClick('kwai', 'aguardando')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${marketplace === 'kwai' && activeTab === 'aguardando' ? 'bg-[#F1C40F] text-[#111827] shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>No Prazo</button>
-                  <button onClick={() => handleMenuClick('kwai', 'divergencias')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex justify-between items-center ${marketplace === 'kwai' && activeTab === 'divergencias' ? 'bg-[#F1C40F] text-[#111827] shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>Erros / Atrasos {resultados?.divergencias?.length > 0 && marketplace==='kwai' && <span className="bg-red-500 text-white px-2 py-0.5 rounded-full text-[10px]">{resultados.divergencias.length}</span>}</button>
-                  <button onClick={() => handleMenuClick('kwai', 'amostras')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${marketplace === 'kwai' && activeTab === 'amostras' ? 'bg-[#F1C40F] text-[#111827] shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>Amostras</button>
-                  <button onClick={() => handleMenuClick('kwai', 'malhafina')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${marketplace === 'kwai' && activeTab === 'malhafina' ? 'bg-[#F1C40F] text-[#111827] shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>Cancelados</button>
-                  <button onClick={() => handleMenuClick('kwai', 'lucro')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${marketplace === 'kwai' && activeTab === 'lucro' ? 'bg-[#F1C40F] text-[#111827] shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>Meu Lucro Real</button>
-                </div>
-              )}
-            </div>
-
-            {/* MENU TIKTOK */}
-            <div className="bg-gray-900/60 rounded-2xl border border-gray-800 overflow-hidden">
-              <button onClick={() => toggleMenu('tiktok')} className={`w-full flex items-center justify-between p-4 text-sm font-bold ${marketplace==='tiktok' ? 'text-white' : 'text-gray-400 hover:text-white hover:bg-gray-900/50'} transition-colors`}>
-                 <div className="flex items-center gap-3"><div className={`bg-pink-500/10 p-2 rounded-lg ${marketplace==='tiktok'?'text-pink-500':'text-gray-500'}`}><Video size={18}/></div> TikTok </div>
-                 {marketplace==='tiktok' ? <div className="w-2 h-2 rounded-full bg-pink-500 shadow-[0_0_8px_#ec4899]"></div> : <ChevronDown size={16} className={`transition-transform text-gray-600 ${openMenus['tiktok'] ? 'rotate-180' : ''}`} />}
-              </button>
-              {openMenus['tiktok'] && (
-                <div className="pl-12 pr-4 pb-4 pt-1 space-y-1.5">
-                  <button onClick={() => handleMenuClick('tiktok', 'dashboard')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${marketplace === 'tiktok' && activeTab === 'dashboard' ? 'bg-pink-500 text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>Visão Geral</button>
-                  <button onClick={() => handleMenuClick('tiktok', 'upload')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${marketplace === 'tiktok' && activeTab === 'upload' ? 'bg-pink-500 text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>Subir Planilhas</button>
-                  <button onClick={() => handleMenuClick('tiktok', 'aguardando')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${marketplace === 'tiktok' && activeTab === 'aguardando' ? 'bg-pink-500 text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>No Prazo</button>
-                  <button onClick={() => handleMenuClick('tiktok', 'divergencias')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex justify-between items-center ${marketplace === 'tiktok' && activeTab === 'divergencias' ? 'bg-pink-500 text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>Erros / Atrasos {resultados?.divergencias?.length > 0 && marketplace==='tiktok' && <span className="bg-red-500 text-white px-2 py-0.5 rounded-full text-[10px]">{resultados.divergencias.length}</span>}</button>
-                  <button onClick={() => handleMenuClick('tiktok', 'malhafina')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${marketplace === 'tiktok' && activeTab === 'malhafina' ? 'bg-pink-500 text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>Cancelados</button>
-                  <button onClick={() => handleMenuClick('tiktok', 'lucro')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${marketplace === 'tiktok' && activeTab === 'lucro' ? 'bg-pink-500 text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>Meu Lucro Real</button>
-                </div>
-              )}
-            </div>
-
-            {/* SHOPEE / MELI */}
-            <button onClick={() => handleMenuClick('shopee', 'em_breve')} className="bg-transparent border border-gray-800 w-full flex items-center justify-between p-4 text-sm font-bold text-gray-500 hover:bg-gray-900/50 rounded-2xl transition-colors">
-               <div className="flex items-center gap-3"><ShoppingBag size={18} className="text-gray-600"/> Shopee </div><span className="bg-gray-800 text-[9px] uppercase tracking-wider text-gray-400 px-2 py-1 rounded-md font-black">Em breve</span>
-            </button>
-            <button onClick={() => handleMenuClick('meli', 'em_breve')} className="bg-transparent border border-gray-800 w-full flex items-center justify-between p-4 text-sm font-bold text-gray-500 hover:bg-gray-900/50 rounded-2xl transition-colors">
-               <div className="flex items-center gap-3"><Store size={18} className="text-gray-600"/> Mercado Livre </div><span className="bg-gray-800 text-[9px] uppercase tracking-wider text-gray-400 px-2 py-1 rounded-md font-black">Em breve</span>
-            </button>
-
-          </div>
-
-          <div className="h-px bg-gray-800 my-6 mx-2"></div>
-          <p className="text-[11px] uppercase tracking-widest text-gray-500 font-bold mb-3 ml-2">Configurações Gerais</p>
-          <nav className="space-y-2">
-            <button onClick={() => { setMarketplace('global'); setActiveTab('produtos'); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold transition-all ${activeTab === 'produtos' ? 'bg-[#10b981] text-white shadow-lg' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}><Package size={18}/> Custos de Produtos</button>
-          </nav>
-        </div>
-        <div className="p-5 border-t border-gray-800"><button onClick={() => supabase.auth.signOut()} className="w-full flex items-center justify-center gap-3 px-4 py-3 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-2xl transition-colors text-sm font-bold"><LogOut size={18}/> Sair da Conta</button></div>
-      </div>
-
-      <div className="flex-1 h-full overflow-y-auto p-10 relative">
-        
-        {activeTab === 'produtos' && (
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'caixa':
+        return <FluxoCaixaView />;
+      case 'produtos':
+        return (
           <div className="w-full animate-fade-in max-w-6xl mx-auto pb-10">
             <SecaoHeader titulo="Seus Custos e Produtos" icone={Package} descricao="Cadastre quanto custou cada produto para você. Isso serve para calcularmos o seu lucro líquido em todas as plataformas." />
             <div className="bg-white border border-gray-100 rounded-3xl shadow-sm overflow-hidden">
@@ -543,32 +471,30 @@ export default function Dashboard({ session }: any) {
                )}
             </div>
           </div>
-        )}
-
-        {activeTab === 'em_breve' && (
-           <div className="flex flex-col items-center justify-center min-h-[70vh] text-center animate-fade-in">
-             <div className="bg-white border border-gray-200 p-8 rounded-full shadow-lg mb-8 relative">
-                <div className="absolute top-0 right-0 -mr-2 -mt-2 bg-gray-800 text-white text-[10px] px-3 py-1 rounded-full font-bold shadow-md animate-pulse">EM BREVE</div>
-                {marketplace === 'shopee' && <ShoppingBag size={56} className="text-[#ee4d2d]" />}
-                {marketplace === 'meli' && <Store size={56} className="text-[#eab308]" />}
-             </div>
-             <h2 className="text-3xl font-black text-gray-900 tracking-tight">Estamos construindo a ponte!</h2>
-             <p className="text-gray-500 mt-4 max-w-lg leading-relaxed text-lg font-medium">As regras da <b>{marketplace.toUpperCase()}</b> são diferentes. Nossos engenheiros estão adaptando o sistema para garantir a mesma precisão absurda que você já tem na Kwai e TikTok.</p>
-           </div>
-        )}
-
-        {activeTab !== 'produtos' && activeTab !== 'em_breve' && (marketplace === 'kwai' || marketplace === 'tiktok') && (
+        );
+      case 'em_breve':
+        return (
+          <div className="flex flex-col items-center justify-center min-h-[70vh] text-center animate-fade-in">
+            <div className="bg-white border border-gray-200 p-8 rounded-full shadow-lg mb-8 relative">
+               <div className="absolute top-0 right-0 -mr-2 -mt-2 bg-gray-800 text-white text-[10px] px-3 py-1 rounded-full font-bold shadow-md animate-pulse">EM BREVE</div>
+               {marketplace === 'shopee' && <ShoppingBag size={56} className="text-[#ee4d2d]" />}
+               {marketplace === 'meli' && <Store size={56} className="text-[#eab308]" />}
+            </div>
+            <h2 className="text-3xl font-black text-gray-900 tracking-tight">Estamos construindo a ponte!</h2>
+            <p className="text-gray-500 mt-4 max-w-lg leading-relaxed text-lg font-medium">As regras da <b>{marketplace.toUpperCase()}</b> são diferentes. Nossos engenheiros estão adaptando o sistema para garantir a mesma precisão absurda que você já tem na Kwai e TikTok.</p>
+          </div>
+        );
+      default:
+        return (
           <>
             {activeTab === 'dashboard' && resultados && (
               <div className="w-full animate-fade-in max-w-6xl mx-auto pb-10">
                 <SecaoHeader titulo={`Resumo Geral (${marketplace.charAt(0).toUpperCase() + marketplace.slice(1)})`} icone={LayoutDashboard} descricao="Acompanhe o volume real de vendas e descubra imediatamente se há dinheiro seu retido por erros da plataforma." />
-                
                 <div className="flex justify-end gap-3 mb-6">
                     <Tooltip texto="Gera um arquivo de código com todos os cálculos."><button onClick={exportarJSON} className="flex items-center gap-2 text-sm font-bold text-gray-600 bg-white hover:bg-gray-50 border border-gray-200 px-5 py-2.5 rounded-xl transition-colors shadow-sm"><FileJson size={16}/> Exportar I.A (JSON)</button></Tooltip>
                     <Tooltip texto="Baixa uma cópia de segurança em Excel de absolutamente tudo."><button onClick={exportarBackupGeral} className="flex items-center gap-2 text-sm font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-100 px-5 py-2.5 rounded-xl transition-colors shadow-sm"><Archive size={16}/> Backup da Conta</button></Tooltip>
                     <Tooltip texto={`Apaga as auditorias de ${marketplace}.`}><button onClick={apagarTudo} className="flex items-center gap-2 text-sm font-bold text-red-600 bg-red-50 hover:bg-red-100 border border-red-100 px-5 py-2.5 rounded-xl transition-colors shadow-sm"><Trash2 size={16}/> Começar do Zero</button></Tooltip>
                 </div>
-
                 <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
                   <div className="xl:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm flex flex-col justify-center">
@@ -592,18 +518,15 @@ export default function Dashboard({ session }: any) {
                 </div>
               </div>
             )}
-            
             {activeTab === 'dashboard' && !resultados && (
               <div className="w-full animate-fade-in max-w-5xl mx-auto flex flex-col items-center justify-center min-h-[80vh] relative">
                 <div className="bg-transparent p-6 rounded-full shadow-lg mb-8 bg-white border border-gray-200">
                   {marketplace === 'tiktok' ? <Video size={56} className="text-pink-500" /> : <ShieldCheck size={56} className="text-yellow-600" />}
                 </div>
-                
                 <h2 className="text-4xl font-black text-gray-900 tracking-tight text-center mb-6">Conferência Inteligente ({marketplace.charAt(0).toUpperCase() + marketplace.slice(1)})</h2>
                 <p className="text-gray-500 text-center max-w-2xl mb-12 text-lg font-medium leading-relaxed">
                   Chega de planilhas confusas. Nós cruzamos suas vendas da UPSeller com os pagamentos da plataforma e mostramos exatamente onde está o seu dinheiro.
                 </p>
-
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8 w-full mb-12">
                   <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 hover:-translate-y-1 transition-transform">
                     <Database size={28} className="text-blue-500 mb-5" />
@@ -622,13 +545,11 @@ export default function Dashboard({ session }: any) {
                     <p className="text-sm text-gray-500 font-medium leading-relaxed">Mostramos os atrasados para você cobrar, os fretes indevidos e qual foi o seu lucro real.</p>
                   </div>
                 </div>
-
                 <button onClick={() => setActiveTab('upload')} className={`bg-[#111827] ${marketplace==='tiktok'?'text-pink-400':'text-[#F1C40F]'} px-10 py-5 rounded-2xl font-black text-lg hover:shadow-2xl hover:scale-105 transition-all flex items-center justify-center gap-3`}>
                   <UploadCloud size={24}/> Começar a Verificação
                 </button>
               </div>
             )}
-
             {activeTab === 'upload' && (
               <div className="w-full animate-fade-in max-w-5xl mx-auto pb-10">
                 <SecaoHeader titulo="Subir Planilhas" icone={UploadCloud} descricao={`Coloque aqui seus relatórios e deixe a mágica acontecer para o ${marketplace.charAt(0).toUpperCase() + marketplace.slice(1)}.`} />
@@ -642,7 +563,6 @@ export default function Dashboard({ session }: any) {
                       <input type="file" className="hidden" onChange={(e) => lerPlanilha(e, setUpsellerData)} />
                     </label>
                   </Tooltip>
-
                   <Tooltip texto={`Vá no painel de finanças do ${marketplace} e baixe o relatório de liquidação.`}>
                     <label className="bg-white border-2 border-dashed border-gray-300 rounded-3xl p-10 flex flex-col items-center justify-center cursor-pointer hover:border-gray-400 transition-all w-full">
                       <div className="bg-gray-100 p-4 rounded-xl mb-5 text-gray-500"><FileSpreadsheet size={32}/></div>
@@ -653,11 +573,9 @@ export default function Dashboard({ session }: any) {
                     </label>
                   </Tooltip>
                 </div>
-                
                 <button onClick={executarConciliacao} disabled={isSyncing} className={`w-full py-5 rounded-2xl shadow-xl font-black text-lg uppercase tracking-widest flex items-center justify-center gap-3 transition-all ${isSyncing ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : `bg-[#111827] ${marketplace==='tiktok'?'text-pink-400':'text-[#F1C40F]'} hover:shadow-2xl hover:-translate-y-1`}`}>{isSyncing ? <><Loader2 className="animate-spin" size={24}/> Conferindo linhas...</> : <><Database size={24}/> Iniciar Conferência Automática</>}</button>
               </div>
             )}
-
             {activeTab === 'divergencias' && (
               <div className="w-full animate-fade-in max-w-6xl mx-auto pb-10">
                 <SecaoHeader titulo="Erros & Dinheiro Retido" icone={AlertTriangle} descricao="Identificamos falhas de taxas, fretes não autorizados e atrasos logísticos para você abrir chamado na plataforma." />
@@ -694,7 +612,6 @@ export default function Dashboard({ session }: any) {
                         {resultados.divergencias.length === 0 && <div className="p-16 text-center text-lg font-bold text-gray-400">Nenhuma cobrança indevida.</div>}
                       </div>
                     </div>
-
                     <div className="bg-white border border-gray-100 rounded-3xl shadow-sm flex flex-col min-h-[300px] overflow-hidden w-full relative">
                       <div className="absolute top-0 left-0 w-2 h-full bg-orange-500"></div>
                       <div className="p-6 border-b border-gray-100 bg-gray-50 flex justify-between items-center ml-2">
@@ -724,7 +641,6 @@ export default function Dashboard({ session }: any) {
                 )}
               </div>
             )}
-
             {activeTab === 'amostras' && (
               <div className="w-full animate-fade-in max-w-5xl mx-auto pb-10">
                 <SecaoHeader titulo="Amostras & Casos Estranhos" icone={Search} descricao="Pedidos que resultaram em valores muito baixos ou divergência entre ERP e plataforma." />
@@ -756,7 +672,6 @@ export default function Dashboard({ session }: any) {
                         {resultados.amostras.length === 0 && <p className="text-gray-400 font-bold text-lg text-center py-16">Nenhuma amostra suspeita.</p>}
                       </div>
                     </div>
-
                     <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden w-full relative">
                       <div className="absolute top-0 left-0 w-2 h-full bg-purple-500"></div>
                       <div className="p-6 border-b border-gray-100 bg-gray-50 flex justify-between items-center ml-2">
@@ -788,7 +703,6 @@ export default function Dashboard({ session }: any) {
                 )}
               </div>
             )}
-
             {activeTab === 'aguardando' && (
               <div className="w-full animate-fade-in max-w-5xl mx-auto pb-10">
                 <SecaoHeader titulo="A Caminho (No Prazo)" icone={Hourglass} descricao="Pedidos que foram enviados e estão dentro do ciclo normal de liquidação da plataforma." />
@@ -811,7 +725,6 @@ export default function Dashboard({ session }: any) {
                 )}
               </div>
             )}
-
             {activeTab === 'malhafina' && (
               <div className="w-full animate-fade-in max-w-5xl mx-auto pb-10">
                 <SecaoHeader titulo="Cancelados & Devolvidos" icone={Ban} descricao="Nós separamos tudo que foi Cancelado ou Reembolsado para que esses valores não sujem o cálculo do seu faturamento real." />
@@ -832,7 +745,6 @@ export default function Dashboard({ session }: any) {
                 )}
               </div>
             )}
-
             {activeTab === 'lucro' && (
               <div className="w-full animate-fade-in max-w-6xl mx-auto pb-10">
                 <SecaoHeader titulo="O que sobra no seu bolso (DRE)" icone={LineChart} descricao="A verdade crua. Nós juntamos os pagamentos corretos da plataforma, isolamos os erros e tiramos o quanto custou para você fabricar/comprar o produto." />
@@ -842,12 +754,10 @@ export default function Dashboard({ session }: any) {
                       <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Venda Líquida Processada</p>
                       <p className="text-4xl font-black tracking-tight text-gray-900">R$ {resultados.valorBruto.toLocaleString('pt-BR', {minimumFractionDigits:2})}</p>
                     </div></Tooltip>
-                    
                     <Tooltip texto="A soma do que você pagou para adquirir/fabricar os produtos vendidos (baseado no menu de Custos de Produtos)."><div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 flex flex-col justify-center hover:-translate-y-1 transition-transform cursor-help">
                       <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Custos de Produto (COGS)</p>
                       <p className="text-4xl font-black tracking-tight text-gray-500">- R$ {resultados.custoTotal.toLocaleString('pt-BR', {minimumFractionDigits:2})}</p>
                     </div></Tooltip>
-                    
                     <Tooltip texto="O que de fato sobra no seu bolso depois que o marketplace cobrou a taxa, o frete, e você pagou pelo produto."><div className="bg-gradient-to-br from-[#10b981] to-emerald-600 p-8 rounded-3xl shadow-2xl text-white relative overflow-hidden hover:scale-105 transition-transform cursor-help border border-emerald-500">
                        <div className="absolute top-0 right-0 w-40 h-40 bg-white opacity-10 rounded-full blur-3xl -mr-10 -mt-10"></div>
                        <p className="text-xs font-black text-emerald-100 uppercase tracking-widest mb-3 relative z-10">Lucro Líquido Final</p>
@@ -858,8 +768,89 @@ export default function Dashboard({ session }: any) {
               </div>
             )}
           </>
-        )}
+        );
+    }
+  };
 
+  return (
+    <div className="flex h-screen w-full bg-[#f8fafc] text-gray-800 font-sans overflow-hidden selection:bg-[#F1C40F] selection:text-black">
+      {/* SIDEBAR MODULAR */}
+      <div className="w-72 bg-[#111827] flex-shrink-0 flex flex-col justify-between overflow-y-auto border-r border-gray-800 scrollbar-hide shadow-xl z-20 relative">
+        <div className="p-5">
+          <div className="flex items-center gap-3 mb-8 px-2 mt-2">
+            <div className="bg-[#F1C40F] p-2 rounded-lg shadow-lg"><ShieldCheck size={24} className="text-[#111827]" /></div>
+            <h1 className="text-xl font-black text-white tracking-widest">REPASSE<span className="text-[#F1C40F]">.AI</span></h1>
+          </div>
+          
+          <p className="text-[11px] uppercase tracking-widest text-gray-500 font-bold mb-3 ml-2">Financeiro</p>
+          <div className="space-y-2 mb-6">
+            <button
+              onClick={() => handleMenuClick('caixa', 'caixa')}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold transition-all ${
+                activeTab === 'caixa' 
+                  ? 'bg-[#F1C40F] text-[#111827] shadow-lg' 
+                  : 'text-gray-400 hover:text-white hover:bg-gray-800'
+              }`}
+            >
+              <DollarSign size={18}/> Fluxo de Caixa
+            </button>
+          </div>
+
+          <p className="text-[11px] uppercase tracking-widest text-gray-500 font-bold mb-3 ml-2">Suas Plataformas</p>
+          <div className="space-y-3 mb-6">
+            {/* MENU KWAI */}
+            <div className="bg-gray-900/60 rounded-2xl border border-gray-800 overflow-hidden">
+              <button onClick={() => toggleMenu('kwai')} className={`w-full flex items-center justify-between p-4 text-sm font-bold ${marketplace==='kwai' && activeTab !== 'caixa' ? 'text-white' : 'text-gray-400 hover:text-white hover:bg-gray-900/50'} transition-colors`}>
+                 <div className="flex items-center gap-3"><div className={`bg-[#F1C40F]/10 p-2 rounded-lg ${marketplace==='kwai' && activeTab !== 'caixa' ?'text-[#F1C40F]':'text-gray-500'}`}><Smartphone size={18}/></div> Kwai </div>
+                 {marketplace==='kwai' && activeTab !== 'caixa' ? <div className="w-2 h-2 rounded-full bg-[#10b981] shadow-[0_0_8px_#10b981]"></div> : <ChevronDown size={16} className={`transition-transform text-gray-600 ${openMenus['kwai'] ? 'rotate-180' : ''}`} />}
+              </button>
+              {openMenus['kwai'] && (
+                <div className="pl-12 pr-4 pb-4 pt-1 space-y-1.5">
+                  <button onClick={() => handleMenuClick('kwai', 'dashboard')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${marketplace === 'kwai' && activeTab === 'dashboard' ? 'bg-[#F1C40F] text-[#111827] shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>Visão Geral</button>
+                  <button onClick={() => handleMenuClick('kwai', 'upload')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${marketplace === 'kwai' && activeTab === 'upload' ? 'bg-[#F1C40F] text-[#111827] shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>Subir Planilhas</button>
+                  <button onClick={() => handleMenuClick('kwai', 'aguardando')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${marketplace === 'kwai' && activeTab === 'aguardando' ? 'bg-[#F1C40F] text-[#111827] shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>No Prazo</button>
+                  <button onClick={() => handleMenuClick('kwai', 'divergencias')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex justify-between items-center ${marketplace === 'kwai' && activeTab === 'divergencias' ? 'bg-[#F1C40F] text-[#111827] shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>Erros / Atrasos {resultados?.divergencias?.length > 0 && marketplace==='kwai' && <span className="bg-red-500 text-white px-2 py-0.5 rounded-full text-[10px]">{resultados.divergencias.length}</span>}</button>
+                  <button onClick={() => handleMenuClick('kwai', 'amostras')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${marketplace === 'kwai' && activeTab === 'amostras' ? 'bg-[#F1C40F] text-[#111827] shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>Amostras</button>
+                  <button onClick={() => handleMenuClick('kwai', 'malhafina')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${marketplace === 'kwai' && activeTab === 'malhafina' ? 'bg-[#F1C40F] text-[#111827] shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>Cancelados</button>
+                  <button onClick={() => handleMenuClick('kwai', 'lucro')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${marketplace === 'kwai' && activeTab === 'lucro' ? 'bg-[#F1C40F] text-[#111827] shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>Meu Lucro Real</button>
+                </div>
+              )}
+            </div>
+            {/* MENU TIKTOK */}
+            <div className="bg-gray-900/60 rounded-2xl border border-gray-800 overflow-hidden">
+              <button onClick={() => toggleMenu('tiktok')} className={`w-full flex items-center justify-between p-4 text-sm font-bold ${marketplace==='tiktok' && activeTab !== 'caixa' ? 'text-white' : 'text-gray-400 hover:text-white hover:bg-gray-900/50'} transition-colors`}>
+                 <div className="flex items-center gap-3"><div className={`bg-pink-500/10 p-2 rounded-lg ${marketplace==='tiktok' && activeTab !== 'caixa' ?'text-pink-500':'text-gray-500'}`}><Video size={18}/></div> TikTok </div>
+                 {marketplace==='tiktok' && activeTab !== 'caixa' ? <div className="w-2 h-2 rounded-full bg-pink-500 shadow-[0_0_8px_#ec4899]"></div> : <ChevronDown size={16} className={`transition-transform text-gray-600 ${openMenus['tiktok'] ? 'rotate-180' : ''}`} />}
+              </button>
+              {openMenus['tiktok'] && (
+                <div className="pl-12 pr-4 pb-4 pt-1 space-y-1.5">
+                  <button onClick={() => handleMenuClick('tiktok', 'dashboard')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${marketplace === 'tiktok' && activeTab === 'dashboard' ? 'bg-pink-500 text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>Visão Geral</button>
+                  <button onClick={() => handleMenuClick('tiktok', 'upload')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${marketplace === 'tiktok' && activeTab === 'upload' ? 'bg-pink-500 text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>Subir Planilhas</button>
+                  <button onClick={() => handleMenuClick('tiktok', 'aguardando')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${marketplace === 'tiktok' && activeTab === 'aguardando' ? 'bg-pink-500 text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>No Prazo</button>
+                  <button onClick={() => handleMenuClick('tiktok', 'divergencias')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex justify-between items-center ${marketplace === 'tiktok' && activeTab === 'divergencias' ? 'bg-pink-500 text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>Erros / Atrasos {resultados?.divergencias?.length > 0 && marketplace==='tiktok' && <span className="bg-red-500 text-white px-2 py-0.5 rounded-full text-[10px]">{resultados.divergencias.length}</span>}</button>
+                  <button onClick={() => handleMenuClick('tiktok', 'malhafina')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${marketplace === 'tiktok' && activeTab === 'malhafina' ? 'bg-pink-500 text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>Cancelados</button>
+                  <button onClick={() => handleMenuClick('tiktok', 'lucro')} className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${marketplace === 'tiktok' && activeTab === 'lucro' ? 'bg-pink-500 text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}>Meu Lucro Real</button>
+                </div>
+              )}
+            </div>
+            {/* SHOPEE / MELI */}
+            <button onClick={() => handleMenuClick('shopee', 'em_breve')} className="bg-transparent border border-gray-800 w-full flex items-center justify-between p-4 text-sm font-bold text-gray-500 hover:bg-gray-900/50 rounded-2xl transition-colors">
+               <div className="flex items-center gap-3"><ShoppingBag size={18} className="text-gray-600"/> Shopee </div><span className="bg-gray-800 text-[9px] uppercase tracking-wider text-gray-400 px-2 py-1 rounded-md font-black">Em breve</span>
+            </button>
+            <button onClick={() => handleMenuClick('meli', 'em_breve')} className="bg-transparent border border-gray-800 w-full flex items-center justify-between p-4 text-sm font-bold text-gray-500 hover:bg-gray-900/50 rounded-2xl transition-colors">
+               <div className="flex items-center gap-3"><Store size={18} className="text-gray-600"/> Mercado Livre </div><span className="bg-gray-800 text-[9px] uppercase tracking-wider text-gray-400 px-2 py-1 rounded-md font-black">Em breve</span>
+            </button>
+          </div>
+          <div className="h-px bg-gray-800 my-6 mx-2"></div>
+          <p className="text-[11px] uppercase tracking-widest text-gray-500 font-bold mb-3 ml-2">Configurações Gerais</p>
+          <nav className="space-y-2">
+            <button onClick={() => { setMarketplace('global'); setActiveTab('produtos'); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold transition-all ${activeTab === 'produtos' ? 'bg-[#10b981] text-white shadow-lg' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}><Package size={18}/> Custos de Produtos</button>
+          </nav>
+        </div>
+        <div className="p-5 border-t border-gray-800"><button onClick={() => supabase.auth.signOut()} className="w-full flex items-center justify-center gap-3 px-4 py-3 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-2xl transition-colors text-sm font-bold"><LogOut size={18}/> Sair da Conta</button></div>
+      </div>
+      <div className="flex-1 h-full overflow-y-auto p-10 relative">
+        {renderContent()}
       </div>
     </div>
   );
